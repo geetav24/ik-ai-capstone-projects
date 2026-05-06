@@ -4,6 +4,9 @@
 # Python
 __pycache__/
 *.pyc
+.venv/
+venv/
+env/
 
 # Node / React
 node_modules/
