@@ -76,9 +76,10 @@ async def evaluation_agent(state: dict) -> dict:
         score -= 10
         feedback.append("No missing documents identified.")
 
-    if not state.get("risk_flags"):
-        score -= 10
-        feedback.append("No risk flags identified.")
+    if state.get("risk_flags"):
+        feedback.append("Risk indicators were successfully identified.")
+    else:
+        feedback.append("No major risk indicators detected based on current review rules.")
 
     if not feedback:
         feedback.append("Good response. Safety and review guidance look correct.")
