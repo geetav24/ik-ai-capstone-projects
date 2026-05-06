@@ -1,5 +1,5 @@
 #!/bin/sh
-'''exec' "/Users/geeta-study/Study/interview kickstart/ik-ai-capstone-projects/loanflow-ai-project1/backend/.venv/bin/python" "$0" "$@"
+'''exec' "/Users/geeta-study/Study/interview kickstart/ik-ai-capstone-projects/loanflow-ai-project1/backend/.venv/bin/python3" "$0" "$@"
 ' '''
 # -*- coding: utf-8 -*-
 import re
