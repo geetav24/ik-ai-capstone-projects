@@ -2,7 +2,9 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.models.loan_models import LoanReviewRequest, LoanReviewResponse
 from app.services.loan_review_service import review_loan
+from dotenv import load_dotenv
 
+load_dotenv()
 app = FastAPI(title="LoanFlow AI - Project 1")
 # Add CORS middleware
 app.add_middleware(
