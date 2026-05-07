@@ -3,6 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.models.loan_models import LoanReviewRequest, LoanReviewResponse
 from app.services.loan_review_service import review_loan
 from dotenv import load_dotenv
+from app.routes.document_routes import router as document_router
 
 load_dotenv()
 app = FastAPI(title="LoanFlow AI - Project 1")
@@ -14,6 +15,8 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+app.include_router(document_router)
 
 @app.get("/health")
 def health():

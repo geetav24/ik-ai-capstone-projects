@@ -1,7 +1,19 @@
 # app/workflows/langgraph_workflow.py
 
-from langgraph.graph import StateGraph,START, END
+from langgraph.graph import StateGraph, END
+from app.llm_client import ask_llm
+from app.tools.loan_policy_tool import get_loan_policy
+from app.services.retrieval_service import search_similar_chunks
 
+async def retrieval_agent(state: dict) -> dict:
+    question = state.get("question", "")
+
+    retrieved_context = search_similar_chunks(question, top_k=3)
+
+    state["retrieved_context"] = retrieved_context
+    state["agent_trace"].append("RetrievalAgent completed")
+
+    return state
 
 async def document_check_agent(state: dict) -> dict:
     """
@@ -20,33 +32,70 @@ async def document_check_agent(state: dict) -> dict:
 
 
 async def risk_review_agent(state: dict) -> dict:
-    """
-    TODO: Later add credit score / income / loan amount risk rules.
-    """
-    state["risk_flags"] = []
-    
-    if state["credit_score"] < 650:
-     state["risk_flags"].append("low_credit_score")
+    risk_flags = []
 
-    if state["loan_amount"] > state["annual_income"] * 5:
-        state["risk_flags"].append("high_dti_risk")
-    
+    if state["credit_score"] < 700:
+        risk_flags.append("low_credit_score")
+
+    if state["loan_amount"] > 500000:
+        risk_flags.append("high_loan_amount")
+
+    state["risk_flags"] = risk_flags
+
     state["agent_trace"].append("RiskReviewAgent completed")
+
     return state
 
 
 async def reviewer_agent(state: dict) -> dict:
-    """
-    TODO: Later replace this with LLM-generated reviewer guidance.
-    """
-    state["answer"] = (
-        f"Loan {state['loan_id']} requires human review. "
-        f"Missing documents: {state['missing_documents']}. "
-        f"Risk flags: {state['risk_flags']}. "
-        "This system does not approve or reject loans."
+    retrieved_context_text = "\n\n".join(
+        [
+            f"Source: {item.get('filename')} | Chunk: {item.get('chunk_index')}\n{item.get('text')}"
+            for item in state.get("retrieved_context", [])
+        ]
     )
 
-    state["agent_trace"].append("reviewer_agent")
+    prompt = f"""
+            You are a loan review assistant.
+
+            Retrieved policy context:
+            {retrieved_context_text}
+
+            Loan details:
+            - Loan ID: {state.get("loan_id")}
+            - Borrower: {state.get("borrower_name")}
+            - Loan Amount: {state.get("loan_amount")}
+            - Annual Income: {state.get("annual_income")}
+            - Credit Score: {state.get("credit_score")}
+
+            Detected missing documents:
+            {state.get("missing_documents", [])}
+
+            Detected risk flags:
+            {state.get("risk_flags", [])}
+
+            Reviewer question:
+            {state.get("question")}
+
+            Write safe reviewer guidance.
+            Do not approve or reject the loan.
+            """
+    answer = await ask_llm(prompt)
+
+    citations = [
+        {
+            "filename": item.get("filename"),
+            "chunk_index": item.get("chunk_index"),
+            "score": item.get("score"),
+        }
+        for item in state.get("retrieved_context", [])
+    ]
+    state["citations"] = citations
+    state["answer"] = answer
+
+    state["agent_trace"].append("LoanPolicyTool called")
+    state["agent_trace"].append("ReviewerAgent completed")
+
     return state
 
 async def guardrail_agent(state: dict) -> dict:
@@ -94,13 +143,15 @@ async def evaluation_agent(state: dict) -> dict:
 
 def build_graph():
     graph = StateGraph(dict)
+    graph.add_node("retrieval_agent", retrieval_agent)
     graph.add_node("document_check", document_check_agent)
     graph.add_node("risk_review", risk_review_agent)
     graph.add_node("guardrail", guardrail_agent)
     graph.add_node("reviewer", reviewer_agent)
     graph.add_node("evaluation", evaluation_agent)
 
-    graph.add_edge(START, "document_check")
+    graph.set_entry_point("retrieval_agent")
+    graph.add_edge("retrieval_agent", "document_check")
     graph.add_edge("document_check", "risk_review")
     graph.add_edge("risk_review", "guardrail")
     graph.add_edge("guardrail", "reviewer")
