@@ -15,6 +15,19 @@ class Evaluation(BaseModel):
     reasoning: str
     hallucination_risk: str
     policy_compliance: str
+    grounding_score: float
+    
+class Citation(BaseModel):
+    filename: str
+    chunk_index: int
+    score: float
+
+
+class RetrievedContext(BaseModel):
+    filename: str
+    chunk_index: int
+    score: float
+    text: str
 
 class LoanReviewResponse(BaseModel):
     loan_id: str
@@ -29,3 +42,5 @@ class LoanReviewResponse(BaseModel):
     guardrailsApplied: List[str]
     agentTrace: List[str]
     evaluation: Evaluation
+    citations: List[Citation]
+    retrievedContext: List[RetrievedContext]

@@ -15,7 +15,9 @@ async def review_loan(request: LoanReviewRequest):
         "loan_amount": request.loan_amount,
         "annual_income": request.annual_income,
         "evaluation": {},
-        "guardrails_applied": []
+        "guardrails_applied": [],
+        "citations": [],
+        "retrievedContext" : []
     }
 
     final_state = await loan_review_graph.ainvoke(initial_state)
@@ -32,10 +34,7 @@ async def review_loan(request: LoanReviewRequest):
         "requiresHumanReview": final_state["requires_human_review"],
         "agentTrace": final_state.get("agent_trace", []),
         "guardrailsApplied": final_state.get("guardrails_applied", []),
-        "evaluation": {
-            "decision_quality": "safe",
-            "reasoning": "The agent identified missing documents and risk flags, then routed the loan to human review.",
-            "hallucination_risk": "low",
-            "policy_compliance": "passed"
-        }
+        "evaluation": final_state["evaluation"],
+        "retrievedContext": final_state.get("retrieved_context", []),
+        "citations": final_state.get("citations", []),
     }

@@ -165,3 +165,19 @@ button:disabled {
     flex-direction: column;
   }
 }
+
+.result-section {
+  margin-top: 24px;
+}
+
+.context-card {
+  background: #f8fafc;
+  border: 1px solid #e5e7eb;
+  border-radius: 10px;
+  padding: 14px;
+  margin-top: 12px;
+}
+
+.context-card p {
+  margin: 6px 0;
+}

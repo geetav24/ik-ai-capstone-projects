@@ -61,8 +61,50 @@ export default function ReviewResult({ result }) {
           <p><b>Reasoning:</b> {result.evaluation.reasoning}</p>
           <p><b>Hallucination Risk:</b> {result.evaluation.hallucination_risk}</p>
           <p><b>Policy Compliance:</b> {result.evaluation.policy_compliance}</p>
+          <p><strong>Grounding Score:</strong>{" "} {result.evaluation?.grounding_score}</p>
         </>
       )}
+
+      {result.retrievedContext?.length > 0 && (
+        <section className="result-section">
+          <h3>Retrieved Policy Context</h3>
+
+          {result.retrievedContext.map((item, index) => (
+            <div key={index} className="context-card">
+              <p>
+                <strong>Source:</strong> {item.filename} |{" "}
+                <strong>Chunk:</strong> {item.chunk_index} |{" "}
+                <strong>Score:</strong> {item.score?.toFixed(3)}
+              </p>
+
+              <p>{item.text}</p>
+            </div>
+          ))}
+        </section>
+      )}
+
+
+      {result.citations?.length > 0 && (
+      <section className="result-section">
+        <h3>Citations</h3>
+
+        <ul>
+          {result.citations.map((citation, index) => (
+            <li key={index}>
+              {citation.filename} — Chunk {citation.chunk_index} —
+              Score {citation.score?.toFixed(3)}
+            </li>
+          ))}
+        </ul>
+      </section>
+    )}
+
+
+
     </section>
+    
+    
+
+
   );
 }
