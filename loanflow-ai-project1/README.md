@@ -1,3 +1,4 @@
+```mermaid
 flowchart TD
     UI[React UI] --> API[FastAPI Backend]
 
@@ -30,7 +31,7 @@ flowchart TD
     Response --> Trace[Agent Trace]
     Response --> Evaluation[Evaluation Result]
 
-
+```mermaid
 
 ### Architecture Overview
 
