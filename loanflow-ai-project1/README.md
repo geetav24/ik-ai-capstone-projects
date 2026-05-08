@@ -118,3 +118,7 @@ The application demonstrates:
 - MCP-compatible tool layer
 - Observability and telemetry
 - Deployment scaling
+
+## License
+
+This project is licensed under the MIT License.
