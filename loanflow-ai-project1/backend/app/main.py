@@ -13,7 +13,7 @@ app.add_middleware(
     allow_origins=[
         "http://localhost:5173",
         "http://localhost:3000",
-        "https://loanflow-app.vercel.app",
+        "https://huggingface.co/spaces/geetav-26"
     ],
     allow_credentials=True,
     allow_methods=["*"],
@@ -21,6 +21,14 @@ app.add_middleware(
 )
 
 app.include_router(document_router)
+
+@app.get("/")
+def root():
+    return {
+        "message": "LoanFlow AI Backend is running",
+        "docs": "/docs",
+        "health": "/health"
+    }
 
 @app.get("/health")
 def health():
