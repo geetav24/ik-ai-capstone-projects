@@ -35,7 +35,7 @@ flowchart TD
 
 ### Architecture Overview
 
-LoanFlow AI is a RAG-powered agentic loan review assistant.
+# LoanFlow AI — Multi-Agent RAG Loan Review Assistant.
 
 The system allows users to upload loan policy documents, extracts and chunks the document text, generates OpenAI embeddings, and stores the vectors in Pinecone. When a reviewer submits a loan review question, the LangGraph workflow retrieves relevant policy chunks through a LoanPolicyTool and passes that grounded context to specialized agents.
 
@@ -43,7 +43,7 @@ The workflow includes document checking, risk review, guardrail enforcement, rev
 
 ## Project Overview
 
-LoanFlow AI is a RAG-powered multi-agent loan review assistant built using FastAPI, LangGraph, OpenAI, and Pinecone.
+# LoanFlow AI — Multi-Agent RAG Loan Review Assistant is - A Retrieval-Augmented Generation (RAG) powered multi-agent loan review assistant built using FastAPI, LangGraph, OpenAI, Pinecone, and React.
 
 The system ingests loan policy documents, stores semantic embeddings in Pinecone, retrieves relevant policy context using vector search, and uses multiple AI agents to generate grounded loan review guidance with citations, guardrails, and evaluation scoring.
 
