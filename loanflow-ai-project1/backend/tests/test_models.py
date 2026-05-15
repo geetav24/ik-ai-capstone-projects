@@ -1,5 +1,5 @@
 """
-Smoke tests for v2 Pydantic contracts.
+Smoke tests for Pydantic contracts.
 No LLM calls, no DB — pure model validation.
 Run with: pytest tests/test_models.py -v
 """
@@ -7,7 +7,7 @@ import pytest
 from decimal import Decimal
 from datetime import datetime, timezone
 
-from app.models.v2_models import (
+from app.models.models import (
     LoanApplication,
     LoanReviewRequest,
     SubmittedDocument,

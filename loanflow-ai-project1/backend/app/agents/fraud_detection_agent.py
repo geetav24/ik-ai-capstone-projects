@@ -4,7 +4,7 @@ FraudDetectionAgent — runs conditionally via MCP tool call.
 from datetime import datetime, timezone
 
 from app.core.mcp.client import call_tool
-from app.models.v2_models import FraudFinding, TraceEntry
+from app.models.models import FraudFinding, TraceEntry
 from app.workflows.state import LoanReviewState
 
 

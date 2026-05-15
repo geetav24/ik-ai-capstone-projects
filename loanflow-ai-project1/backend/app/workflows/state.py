@@ -1,5 +1,5 @@
 """
-LangGraph state for the v2 loan review pipeline.
+LangGraph state for the loan review pipeline.
 
 LoanReviewState is a TypedDict that flows through every node.
 Each node receives the full state and returns a dict of keys to update.

@@ -1,5 +1,5 @@
 """
-LoanFlow v2 — LangGraph workflow with conditional routing (USE_CASES.md §4).
+LoanFlow — LangGraph workflow with conditional routing (USE_CASES.md §4).
 
 Architecture (copy this into README):
 
@@ -32,7 +32,7 @@ from app.agents.planner_agent import planner_agent
 from app.agents.retrieval_agent import retrieval_agent
 from app.agents.reviewer_agent import reviewer_agent
 from app.agents.risk_review_agent import risk_review_agent
-from app.models.v2_models import LoanReviewResponse, ReviewerGuidance
+from app.models.models import LoanReviewResponse, ReviewerGuidance
 from app.workflows.state import LoanReviewState
 
 # Routing thresholds (must match planner_agent.py constants)

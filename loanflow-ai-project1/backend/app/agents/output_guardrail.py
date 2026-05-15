@@ -2,7 +2,7 @@
 OutputGuardrail — validates the ReviewerAgent's answer before it reaches the user.
 
 Runs AFTER ReviewerAgent, BEFORE EvaluationAgent.
-(In v1 the guardrail ran before the reviewer — that was wrong. Fixed in v2.)
+The output guardrail runs after the reviewer, before evaluation.
 
 On violation: swap the answer with a safe fallback. No retry.
 The conditional edge after this node routes to either EvaluationAgent (pass)
@@ -17,7 +17,7 @@ import re
 from datetime import datetime, timezone
 
 from app.agents.input_guardrail import _FINANCIAL_PII
-from app.models.v2_models import GuardrailResult, TraceEntry
+from app.models.models import GuardrailResult, TraceEntry
 from app.workflows.state import LoanReviewState
 
 SAFE_FALLBACK_ANSWER = (

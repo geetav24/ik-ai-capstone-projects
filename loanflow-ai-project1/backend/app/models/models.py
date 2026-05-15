@@ -1,5 +1,5 @@
 """
-v2 data contracts. These are the authoritative types for the entire system.
+LoanFlow data contracts. These are the authoritative types for the entire system.
 Agents read and write these. The API exposes them. The UI consumes them.
 If two files disagree on what a RiskFlag looks like, fix one of them.
 """

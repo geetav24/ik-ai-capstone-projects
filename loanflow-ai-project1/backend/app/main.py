@@ -8,7 +8,7 @@ from sqlmodel import Session, select
 from app.core.mcp.client import init_mcp_client, list_tools_with_schema, shutdown_mcp_client
 from app.db.database import create_db_and_tables, engine
 from app.db.models import LoanApplicationTable, SubmittedDocumentTable
-from app.models.v2_models import LoanApplication, LoanReviewRequest, LoanReviewResponse, SubmittedDocument
+from app.models.models import LoanApplication, LoanReviewRequest, LoanReviewResponse, SubmittedDocument
 from app.routes.document_routes import router as document_router
 from app.workflows.langgraph_workflow import run_loan_review
 
@@ -24,7 +24,7 @@ async def lifespan(app: FastAPI):
     await shutdown_mcp_client()  # close session + terminate subprocess
 
 
-app = FastAPI(title="LoanFlow AI v2", lifespan=lifespan)
+app = FastAPI(title="LoanFlow AI", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
@@ -46,7 +46,7 @@ app.include_router(document_router)
 
 @app.get("/")
 def root():
-    return {"message": "LoanFlow AI v2 is running", "docs": "/docs", "health": "/health"}
+    return {"message": "LoanFlow AI is running", "docs": "/docs", "health": "/health"}
 
 
 @app.get("/health")

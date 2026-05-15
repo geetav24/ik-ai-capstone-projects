@@ -1,7 +1,7 @@
 """
 RiskReviewAgent — raises typed risk flags from application data + doc check result.
 
-This agent replaces the v1 IncomeVerificationAgent concept:
+This agent handles income verification — income/loan ratio anomaly detected here as a RiskFlag:
 income/loan ratio anomaly is detected HERE as a RiskFlag, not in a separate agent.
 
 No LLM call needed. Pure rule-based flag generation.
@@ -11,7 +11,7 @@ The flags this agent produces feed directly into the PlannerAgent routing decisi
 from datetime import datetime
 from decimal import Decimal, InvalidOperation
 
-from app.models.v2_models import RiskAssessment, RiskFlag, TraceEntry
+from app.models.models import RiskAssessment, RiskFlag, TraceEntry
 from app.workflows.state import LoanReviewState
 
 

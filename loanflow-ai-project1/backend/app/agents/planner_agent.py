@@ -6,12 +6,12 @@ The routing logic is deterministic: inspect the loan application fields
 and return a Plan that names which agents should run.
 
 Why rule-based?
-  LLM-based planning is in the "out of scope for v2" list.
+  LLM-based planning is in the "out of scope" list.
   Rules are faster, cheaper, and easier to test.
   If rules become unwieldy in v3, switch to LLM planner then.
 """
 from datetime import datetime, timezone
-from app.models.v2_models import LoanApplication, Plan, TraceEntry
+from app.models.models import LoanApplication, Plan, TraceEntry
 from app.workflows.state import LoanReviewState
 
 # Routing thresholds — defined here so tests can import them directly
