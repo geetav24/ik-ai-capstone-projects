@@ -17,7 +17,7 @@ from datetime import datetime
 from typing import Any
 
 from app.llm_client import ask_llm_json
-from app.models.v2_models import Evaluation, TraceEntry
+from app.models.models import Evaluation, TraceEntry
 from app.workflows.state import LoanReviewState
 
 

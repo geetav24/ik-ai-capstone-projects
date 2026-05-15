@@ -22,7 +22,7 @@ _MCP_SERVER_ROOT = str(Path(__file__).resolve().parents[2] / "mcp-server")
 if _MCP_SERVER_ROOT not in sys.path:
     sys.path.insert(0, _MCP_SERVER_ROOT)
 
-from app.models.v2_models import LoanApplication, SubmittedDocument
+from app.models.models import LoanApplication, SubmittedDocument
 
 
 @pytest.fixture

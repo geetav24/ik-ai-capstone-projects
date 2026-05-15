@@ -16,7 +16,7 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
-from app.models.v2_models import LoanApplication, SubmittedDocument
+from app.models.models import LoanApplication, SubmittedDocument
 
 
 # ---------------------------------------------------------------------------

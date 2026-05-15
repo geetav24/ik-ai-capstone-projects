@@ -1,6 +1,6 @@
 # LoanFlow AI — Use Case & Architecture Specification
 
-> Capstone v2 spec. This document is the contract. All code, tests, and reviews derive from it.
+> Capstone spec. This document is the contract. All code, tests, and reviews derive from it.
 > When the spec and code disagree, fix one of them — never silently let them drift.
 
 ---
@@ -24,7 +24,7 @@
 | Actor | Description |
 |---|---|
 | **Loan Reviewer (human)** | Submits a loan application + a question; reads guidance, decides outcome. |
-| **Compliance Officer (human)** | Reviews high-risk routed cases. Out of scope for v2 UI but the API supports `requires_human_review`. |
+| **Compliance Officer (human)** | Reviews high-risk routed cases. Out of scope for the UI but the API supports `requires_human_review`. |
 | **LoanFlow System** | The multi-agent pipeline. |
 | **Knowledge Base** | Company policy documents (PDF, Confluence, OneDrive). Uploaded once; Pinecone stores the embeddings. |
 | **External services** | OpenAI (LLM + embeddings), Pinecone (vector store), SQLite (application + document records). |
@@ -34,7 +34,7 @@
 ## 3. Use Cases
 
 ### UC-1: Upload a loan policy document
-- **Pre:** Reviewer authenticated (auth out of scope for v2; assume single trusted user).
+- **Pre:** Reviewer authenticated (auth out of scope; assume single trusted user).
 - **Flow:** PDF upload → parse → chunk → embed → upsert into Pinecone with `(filename, chunk_index, text)` metadata.
 - **Post:** Document searchable by semantic query. Returns chunk count.
 - **Acceptance:** A 20-page policy uploads in <30s and returns ≥40 chunks.
@@ -47,10 +47,10 @@
   2. **PlannerAgent** inspects the application and decides whether the FraudDetection specialist runs.
   3. **RetrievalAgent** fetches policy chunks relevant to question + loan profile.
   4. **DocumentCheckAgent** compares submitted docs against required docs for this loan type (from policy).
-  5. **RiskReviewAgent** raises typed risk flags including income/loan ratio anomalies (income-verification logic folded in here, not a separate agent in v2).
+  5. **RiskReviewAgent** raises typed risk flags including income/loan ratio anomalies (income-verification logic folded in here, not a separate agent).
   6. **FraudDetectionAgent** runs conditionally (high loan amount, ratio anomalies, or velocity flags).
   7. **ReviewerAgent** synthesizes guidance grounded in retrieved policy + specialist findings.
-  8. **Output guardrail** validates the answer; on violation, replaces the answer with a safe fallback ("Unable to produce guidance, please review manually") — no loop-back retry in v2.
+  8. **Output guardrail** validates the answer; on violation, replaces the answer with a safe fallback ("Unable to produce guidance, please review manually") — no loop-back retry.
   9. **EvaluationAgent (LLM-as-Judge)** scores the response (or the fallback).
 - **Post:** Structured `LoanReviewResponse` with answer, citations, risk flags, missing docs, agent trace, evaluation, guardrails applied.
 - **Acceptance:** End-to-end <20s p95 on a single review (parallel specialists achieve ~15s).
@@ -65,7 +65,7 @@
 
 ---
 
-## 4. Multi-Agent Architecture (v2)
+## 4. Multi-Agent Architecture
 
 ```mermaid
 flowchart TD
@@ -110,7 +110,7 @@ flowchart TD
   - risk flags include `velocity_anomaly`
   - self-employed with high loan amount
 - Skip Fraud only if low-risk: small loan, full docs, normal ratios.
-- **Note:** income/loan ratio anomaly is detected in `RiskReviewAgent` and surfaces as a typed risk flag — there is no separate `IncomeVerificationAgent` in v2 (deferred to future work).
+- **Note:** income/loan ratio anomaly is detected in `RiskReviewAgent` and surfaces as a typed risk flag — there is no separate `IncomeVerificationAgent` (deferred to future work).
 
 > **Learning note:** the router's job is *which* specialists run, not *what* they do. Keep planner logic small and rule-based at first; only add LLM-based planning if rules become unwieldy.
 
@@ -275,7 +275,7 @@ These same records double as fixtures for the eval harness.
 - **Forbidden phrases:** "approved", "I approve", "denied", "rejected" in the *recommendation* sense → fail and force `requires_human_review = True`.
 - **Citation honesty:** every claim citing a source must reference a chunk that actually appears in `retrieved_context`. Drop fabricated citations.
 - **PII scrub:** strip any PII the model regurgitated.
-- **On violation (v2):** replace the response with a safe fallback ("Unable to produce guidance, please escalate for manual review") and set `requires_human_review = True`. **No retry/loop-back in v2** — deferred to future work.
+- **On violation:** replace the response with a safe fallback ("Unable to produce guidance, please escalate for manual review") and set `requires_human_review = True`. **No retry/loop-back** — deferred to future work.
 
 > **Learning note:** Guardrails are *defense in depth*. None alone is sufficient. The combination is.
 
@@ -293,7 +293,7 @@ These same records double as fixtures for the eval harness.
 
 ---
 
-## 9. UI Requirements (v2 — right-sized for timeline)
+## 9. UI Requirements
 
 Keep the existing single-page UI ([LoanReviewForm.jsx](frontend/src/components/LoanReviewForm.jsx), [ReviewResult.jsx](frontend/src/components/ReviewResult.jsx)) and **add a Trace panel** below the result that surfaces:
 
@@ -305,11 +305,11 @@ Keep the existing single-page UI ([LoanReviewForm.jsx](frontend/src/components/L
 
 Add a **Redux Toolkit** slice (`reviewSlice`) holding the latest review's full response so the Trace panel can render off it. Use **RTK Query** for the API call to `/review` so loading + error states are free.
 
-**Deferred to future work:** full 3-tab restructure (Review / Trace / Evaluation tabs as separate routes), historical review browsing UI, evaluation-aggregates dashboard. The data is in the DB — surfacing it in dedicated tabs is post-v2.
+**Deferred to future work:** full 3-tab restructure (Review / Trace / Evaluation tabs as separate routes), historical review browsing UI, evaluation-aggregates dashboard. The data is in the DB — surfacing it in dedicated tabs is future work.
 
 ---
 
-## 10. Out of Scope (v2)
+## 10. Out of Scope
 
 - Real authentication / multi-tenant
 - Real fraud DB integration
@@ -317,8 +317,8 @@ Add a **Redux Toolkit** slice (`reviewSlice`) holding the latest review's full r
 - Mobile UI
 - Document extraction beyond what `submitted_documents.parsed_fields` carries
 - Standalone `IncomeVerificationAgent` (income/loan ratio handled in `RiskReviewAgent` instead)
-- Output guardrail retry/loop-back (block + safe fallback only in v2)
-- Full 3-tab UI restructure (Trace panel only in v2)
+- Output guardrail retry/loop-back (block + safe fallback only)
+- Full 3-tab UI restructure (Trace panel only)
 - More than 5 eval cases
 - LLM-based planning (rule-based planner only)
 
@@ -338,6 +338,6 @@ These belong in a "Future Work" section of the README. Several are picked up imp
 - [ ] Eval suite with **≥5 cases**, including **≥2 injection attempts**
 - [ ] Trace panel added to existing UI showing agents, citations, guardrails, evaluation
 - [ ] Redux Toolkit slice for review state
-- [x] README rewrite reflecting v2 architecture (with mermaid)
+- [x] README rewrite reflecting current architecture (with mermaid)
 - [ ] Demo script (5-min walkthrough — pick scenario #4 from seed data to show full agent flow)
 - [ ] Test coverage ≥80% on agent + guardrail code (pytest + Vitest)

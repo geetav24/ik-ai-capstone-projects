@@ -275,7 +275,7 @@ loanflow-ai-project1/
 │   │   ├── db/
 │   │   │   ├── database.py      # SQLite connection
 │   │   │   └── seed.py          # 6 demo loan applications
-│   │   ├── models/              # Pydantic v2 contracts
+│   │   ├── models/              # Pydantic contracts
 │   │   ├── routes/              # FastAPI route handlers
 │   │   ├── services/            # Embedding + vector store services
 │   │   ├── workflows/

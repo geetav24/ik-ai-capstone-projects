@@ -14,7 +14,7 @@ from datetime import datetime
 from typing import Any
 
 from app.llm_client import ask_llm_quality
-from app.models.v2_models import ReviewerGuidance, TraceEntry
+from app.models.models import ReviewerGuidance, TraceEntry
 from app.workflows.state import LoanReviewState
 
 

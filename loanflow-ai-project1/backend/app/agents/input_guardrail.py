@@ -18,7 +18,7 @@ from presidio_analyzer import AnalyzerEngine
 from presidio_anonymizer import AnonymizerEngine
 from presidio_anonymizer.entities import OperatorConfig
 
-from app.models.v2_models import SanitizedInput, TraceEntry
+from app.models.models import SanitizedInput, TraceEntry
 from app.workflows.state import LoanReviewState
 
 # ---------------------------------------------------------------------------

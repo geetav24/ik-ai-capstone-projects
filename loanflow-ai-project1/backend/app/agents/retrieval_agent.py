@@ -17,7 +17,7 @@ from datetime import datetime, timezone
 from app.core.tool_runner import run_with_tools
 
 logger = logging.getLogger(__name__)
-from app.models.v2_models import Citation, RetrievedContext, TraceEntry
+from app.models.models import Citation, RetrievedContext, TraceEntry
 from app.workflows.state import LoanReviewState
 
 
