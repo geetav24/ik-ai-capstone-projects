@@ -11,6 +11,7 @@ export default function App() {
 
   async function handleReview(payload) {
     setError("");
+    setResult(null);
     setLoading(true);
     try {
       const data = await reviewLoan(payload);

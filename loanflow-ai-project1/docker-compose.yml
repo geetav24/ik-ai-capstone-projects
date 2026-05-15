@@ -1,11 +1,44 @@
 services:
-  ollama:
-    image: ollama/ollama:latest
-    container_name: loanflow-ollama
-    ports:
-      - "11434:11434"
-    volumes:
-      - ollama_data:/root/.ollama
 
-volumes:
-  ollama_data:
+  # ── MCP tool server ────────────────────────────────────────────────────────
+  # Runs independently. Owns all Pinecone / SQLite / LLM access.
+  # FastAPI never talks to Pinecone directly — only through this service.
+  mcp:
+    build:
+      context: ./mcp-server
+      dockerfile: Dockerfile
+    command: python -m app.core.mcp.server
+    ports:
+      - "8001:8001"
+    environment:
+      MCP_TRANSPORT: sse
+      MCP_HOST: 0.0.0.0
+      MCP_PORT: 8001
+      OPENAI_API_KEY: ${OPENAI_API_KEY}
+      PINECONE_API_KEY: ${PINECONE_API_KEY}
+      PINECONE_INDEX_NAME: ${PINECONE_INDEX_NAME}
+      EMBEDDING_MODEL: ${EMBEDDING_MODEL:-text-embedding-3-small}
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8001/sse"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ── FastAPI app ────────────────────────────────────────────────────────────
+  # Handles HTTP requests and runs LangGraph agents.
+  # Connects to the MCP service over SSE — no Pinecone keys needed here.
+  fastapi:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    ports:
+      - "8000:8000"
+    environment:
+      MCP_TRANSPORT: sse
+      MCP_SERVER_URL: http://mcp:8001/sse
+      MCP_API_KEY: ${MCP_API_KEY:-}
+      OPENAI_API_KEY: ${OPENAI_API_KEY}
+    depends_on:
+      mcp:
+        condition: service_healthy
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000

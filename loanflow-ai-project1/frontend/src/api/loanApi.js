@@ -1,16 +1,25 @@
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:8000";
+const API_BASE = import.meta.env.VITE_API_BASE_URL || "http://127.0.0.1:8000";
 
-export async function reviewLoan(payload) {
-  const response = await fetch(`${API_BASE_URL}/agent/review`, {
+async function _get(path) {
+  const res = await fetch(`${API_BASE}${path}`);
+  if (!res.ok) throw new Error(`GET ${path} failed: ${res.status}`);
+  return res.json();
+}
+
+export function fetchLoans() {
+  return _get("/loans");
+}
+
+export function fetchLoan(loanId) {
+  return _get(`/loans/${loanId}`);
+}
+
+export async function reviewLoan({ application, question }) {
+  const res = await fetch(`${API_BASE}/review`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(payload),
+    body: JSON.stringify({ application, question }),
   });
-
-  if (!response.ok) {
-    const text = await response.text();
-    throw new Error(text || "Failed to review loan");
-  }
-
-  return response.json();
+  if (!res.ok) throw new Error(`Review failed: ${res.status}`);
+  return res.json();
 }
