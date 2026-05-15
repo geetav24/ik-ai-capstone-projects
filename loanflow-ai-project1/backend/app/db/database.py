@@ -21,3 +21,8 @@ def get_session():
     """FastAPI dependency. Use with: session: Session = Depends(get_session)."""
     with Session(engine) as session:
         yield session
+
+
+def SessionLocal():
+    """Direct session for scripts (seed.py, CLI). Use as: db = SessionLocal()"""
+    return Session(engine)

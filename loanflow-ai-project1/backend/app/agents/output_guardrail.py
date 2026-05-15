@@ -15,6 +15,8 @@ Three checks (from USE_CASES.md §7):
 """
 import re
 from datetime import datetime, timezone
+
+from app.agents.input_guardrail import _FINANCIAL_PII
 from app.models.v2_models import GuardrailResult, TraceEntry
 from app.workflows.state import LoanReviewState
 
@@ -23,7 +25,6 @@ SAFE_FALLBACK_ANSWER = (
     "Please escalate for manual review."
 )
 
-# Phrases that indicate the model crossed into approval/rejection territory
 FORBIDDEN_PHRASES = [
     "i approve",
     "this loan is approved",
@@ -39,89 +40,100 @@ FORBIDDEN_PHRASES = [
 
 async def output_guardrail_agent(state: LoanReviewState) -> dict:
     """
-    LangGraph node. Reads reviewer_guidance + retrieved_context; writes guardrail_result.
+    Guidance-only implementation of the OutputGuardrail.
     """
     started = datetime.now(timezone.utc)
-    
-    reviewer_guidance = state.get("reviewer_guidance", {})
-    answer = reviewer_guidance.get("answer", "")
-    retrieved_context = state.get("retrieved_context", {})
-    
+    reviewer = state.get("reviewer_guidance") or {}
+    answer = reviewer.get("answer", "") or ""
+    retrieved = state.get("retrieved_context") or {}
+    retrieved_chunks = retrieved.get("chunks", []) if retrieved is not None else []
+
     violations = []
-    
-    # CHECK 1 — Forbidden phrases
+
+    # CHECK 1 — Forbidden phrases (avoid "not approved" false positive)
     answer_lower = answer.lower()
     for phrase in FORBIDDEN_PHRASES:
-        if re.search(r"\b" + re.escape(phrase) + r"\b", answer_lower):
+        # word-boundary match for the phrase
+        pattern = r"\b" + re.escape(phrase) + r"\b"
+        for m in re.finditer(pattern, answer_lower, flags=re.IGNORECASE):
+            start = m.start()
+            # check if 'not' immediately precedes the match (e.g., "not approved")
+            pre_window = answer_lower[max(0, start - 6):start].strip()
+            if pre_window.startswith("not"):
+                # skip this occurrence (not approved)
+                continue
             violations.append("forbidden_phrase")
+            # one violation entry is enough
             break
-    
+        if "forbidden_phrase" in violations:
+            break
+
     # CHECK 2 — Citation honesty
-    # Parse for inline citations like [Source: filename, chunk X]
-    citation_pattern = r"\[Source: (.+?), chunk (\d+)\]"
-    citations_in_answer = re.findall(citation_pattern, answer)
-    
-    # Build a set of valid (filename, chunk_index) pairs from retrieved_context
-    valid_citations = set()
-    for chunk in retrieved_context.get("chunks", []):
-        filename = chunk.get("filename", "")
-        chunk_index = chunk.get("chunk_index", 0)
-        valid_citations.add((filename, str(chunk_index)))
-    
-    # Check each cited pair
-    for filename, chunk_idx in citations_in_answer:
-        if (filename, chunk_idx) not in valid_citations:
+    fabricated = False
+    citation_pattern = re.compile(r"\[Source:\s*(.+?),\s*chunk\s*(\d+)\]", flags=re.IGNORECASE)
+    cited_pairs = citation_pattern.findall(answer)
+    if cited_pairs:
+        # Build a set of (filename, index) present in retrieved_context
+        present_pairs = {
+            (c.get("filename"), int(c.get("chunk_index")))
+            for c in retrieved_chunks
+            if c.get("filename") is not None and c.get("chunk_index") is not None
+        }
+        for filename, chunk_idx_str in cited_pairs:
+            try:
+                idx = int(chunk_idx_str)
+            except ValueError:
+                fabricated = True
+                break
+            if (filename.strip(), idx) not in present_pairs:
+                fabricated = True
+                break
+        if fabricated:
             violations.append("fabricated_citation")
-            break
-    
-    # CHECK 3 — PII scrub
-    pii_redacted = answer
-    
-    # SSN pattern: ###-##-####
-    ssn_pattern = r"\b\d{3}-\d{2}-\d{4}\b"
-    if re.search(ssn_pattern, pii_redacted):
-        pii_redacted = re.sub(ssn_pattern, "[REDACTED:SSN]", pii_redacted)
+
+    # CHECK 3 — PII scrub (use the same financial regexes as InputGuardrail)
+    pii_labels_found = set()
+    sanitized_answer = answer
+    for pattern, label in _FINANCIAL_PII:
+        if re.search(pattern, sanitized_answer):
+            sanitized_answer = re.sub(pattern, f"[REDACTED:{label}]", sanitized_answer)
+            pii_labels_found.add(label)
+    if pii_labels_found:
         violations.append("pii_in_output")
-    
-    # Account number: 8-17 digits
-    account_pattern = r"\b\d{8,17}\b"
-    if re.search(account_pattern, pii_redacted):
-        pii_redacted = re.sub(account_pattern, "[REDACTED:ACCOUNT]", pii_redacted)
-        violations.append("pii_in_output")
-    
-    # Credit card: ####-####-####-####
-    cc_pattern = r"\b(?:\d{4}[- ]?){3}\d{4}\b"
-    if re.search(cc_pattern, pii_redacted):
-        pii_redacted = re.sub(cc_pattern, "[REDACTED:CC]", pii_redacted)
-        violations.append("pii_in_output")
-    
-    # Determine pass/fail and final answer
-    guardrail_result = GuardrailResult(passed=len(violations) == 0, violations=list(set(violations)))
-    
-    # Update guidance if violations found
+
+    # Build guardrail result and possibly swap answer
     if violations:
-        reviewer_guidance["answer"] = SAFE_FALLBACK_ANSWER
-        reviewer_guidance["requires_human_review"] = True
+        guardrail_result = GuardrailResult(passed=False, violations=violations)
+        # set fallback and force human review
+        reviewer["answer"] = SAFE_FALLBACK_ANSWER
+        reviewer["requires_human_review"] = True
+        guardrails_applied = ["output_guardrail"]
+        output_summary = f"violations={violations}"
     else:
-        # Use the PII-redacted version (even though no violations, be safe)
-        reviewer_guidance["answer"] = pii_redacted
-    
+        guardrail_result = GuardrailResult(passed=True, violations=[])
+        # If we sanitized PII but no other violations, keep sanitized text
+        if pii_labels_found:
+            reviewer["answer"] = sanitized_answer
+        guardrails_applied = []
+        output_summary = "passed"
+
     finished = datetime.now(timezone.utc)
-    trace_entry = TraceEntry(
+    trace = TraceEntry(
         agent="output_guardrail",
         started_at=started,
         finished_at=finished,
-        input_summary=f"Answer length: {len(answer)}",
-        output_summary=f"Violations: {violations}, Passed: {guardrail_result.passed}",
+        input_summary=f"answer_len={len(answer)};cited={len(cited_pairs)}",
+        output_summary=output_summary,
     )
-    
-    guardrails_applied = []
-    if violations:
-        guardrails_applied.append("output_guardrail")
-    
-    return {
+
+    result: dict = {
         "guardrail_result": guardrail_result.model_dump(),
-        "reviewer_guidance": reviewer_guidance,
-        "agent_trace": [trace_entry.model_dump()],
+        "agent_trace": [trace.model_dump()],
         "guardrails_applied": guardrails_applied,
     }
+
+    # Include updated reviewer_guidance if changed (LangGraph merges outputs)
+    if reviewer:
+        result["reviewer_guidance"] = reviewer
+
+    return result

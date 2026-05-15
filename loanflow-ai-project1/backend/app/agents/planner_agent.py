@@ -29,15 +29,15 @@ async def planner_agent(state: LoanReviewState) -> dict:
     # Determine if fraud detection should run
     specialists_to_run = []
     rationale = ""
-    
+
+    # Decimal fields arrive as strings after model_dump() — normalise upfront
+    loan_amount = float(app.get("loan_amount") or 0)
+    annual_income = float(app.get("annual_income") or 0)
+
     # Rule 1: loan_amount > HIGH_LOAN_THRESHOLD
-    if app.get("loan_amount", 0) > HIGH_LOAN_THRESHOLD:
+    if loan_amount > HIGH_LOAN_THRESHOLD:
         specialists_to_run.append("fraud_detection")
-        rationale = f"loan_amount {app['loan_amount']} exceeds threshold {HIGH_LOAN_THRESHOLD}"
-    
-    # Rule 2: income_ratio > INCOME_RATIO_THRESHOLD
-    loan_amount = app.get("loan_amount", 0)
-    annual_income = app.get("annual_income", 0)
+        rationale = f"loan_amount {loan_amount} exceeds threshold {HIGH_LOAN_THRESHOLD}"
     
     if annual_income == 0:
         # Edge case: zero income → treat ratio as infinity

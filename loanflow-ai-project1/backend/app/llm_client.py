@@ -19,25 +19,25 @@ from pathlib import Path
 from dotenv import load_dotenv
 from openai import AsyncOpenAI
 
-BASE_DIR = Path(__file__).resolve().parents[1]
-load_dotenv(BASE_DIR / ".env")
+load_dotenv(Path(__file__).resolve().parents[1] / ".env")
 
-api_key = os.getenv("OPENAI_API_KEY")
-if not api_key:
-    raise RuntimeError("OPENAI_API_KEY is missing. Check backend/.env")
-
-_client = AsyncOpenAI(api_key=api_key)
-
-FAST_MODEL = "gpt-4o-mini"
+FAST_MODEL    = "gpt-4o-mini"
 QUALITY_MODEL = "gpt-4o"
 
+_client: AsyncOpenAI | None = None
+
+
+def _get_client() -> AsyncOpenAI:
+    global _client
+    if _client is None:
+        api_key = os.getenv("OPENAI_API_KEY")
+        if not api_key:
+            raise RuntimeError("OPENAI_API_KEY is missing. Check backend/.env")
+        _client = AsyncOpenAI(api_key=api_key)
+    return _client
 
 async def ask_llm_fast(system_prompt: str, user_prompt: str) -> str:
-    """
-    Quick LLM call for utility agents (planner, guardrails, doc-check, fraud).
-    Returns the raw text content of the model's response.
-    """
-    response = await _client.chat.completions.create(
+    response = await _get_client().chat.completions.create(
         model=FAST_MODEL,
         messages=[
             {"role": "system", "content": system_prompt},
@@ -49,17 +49,13 @@ async def ask_llm_fast(system_prompt: str, user_prompt: str) -> str:
 
 
 async def ask_llm_quality(system_prompt: str, user_prompt: str) -> str:
-    """
-    High-quality LLM call for reviewer guidance and LLM-as-Judge evaluation.
-    Returns the raw text content of the model's response.
-    """
-    response = await _client.chat.completions.create(
+    response = await _get_client().chat.completions.create(
         model=QUALITY_MODEL,
         messages=[
             {"role": "system", "content": system_prompt},
             {"role": "user",   "content": user_prompt},
         ],
-        temperature=0.0,  # deterministic for evaluation; keep at 0
+        temperature=0.0,
     )
     return response.choices[0].message.content
 
@@ -74,8 +70,13 @@ async def ask_llm_json(system_prompt: str, user_prompt: str, *, fast: bool = Tru
     """
     fn = ask_llm_fast if fast else ask_llm_quality
     content = await fn(system_prompt, user_prompt)
+    # Strip markdown code fences if the LLM wrapped the JSON
+    stripped = content.strip()
+    if stripped.startswith("```"):
+        stripped = stripped.split("\n", 1)[1]
+        stripped = stripped.rsplit("```", 1)[0].strip()
     try:
-        return json.loads(content)
+        return json.loads(stripped)
     except json.JSONDecodeError as e:
         raise ValueError(
             f"LLM returned non-JSON. Fix your prompt or add 'Return ONLY valid JSON.' "

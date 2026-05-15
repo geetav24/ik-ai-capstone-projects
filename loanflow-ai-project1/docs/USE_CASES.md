@@ -9,10 +9,13 @@
 
 **LoanFlow AI** is a multi-agent retrieval-augmented assistant that helps a human loan reviewer evaluate a loan application against bank policy. The system **never approves or rejects loans** — it produces guidance, citations, risk signals, and a structured recommendation that a human reviewer acts on.
 
+**The company's policy document is the single source of truth.** Upload a different bank's policy PDF and the system adapts — required documents, compliance thresholds, and review criteria all come from the knowledge base, not from hardcoded rules. The same system works for any lender.
+
 ### Why multi-agent (and not one big prompt)
-- **Separation of concerns:** policy retrieval, fraud signals, income verification, and document checks are independent skills with independent failure modes.
+- **Separation of concerns:** policy retrieval, fraud signals, document checks, and review synthesis are independent skills with independent failure modes.
 - **Conditional routing:** different loan profiles need different specialists. A $50K loan with full docs is not the same as a $2M loan with missing income proof. A planner agent decides which specialists to invoke.
 - **Auditability:** each agent emits a typed result; the trace is the audit log a regulator could inspect.
+- **Policy-driven, not rule-driven:** document requirements and compliance rules are retrieved from Pinecone at runtime — changing the policy PDF changes system behavior without a code deploy.
 
 ---
 
@@ -23,7 +26,8 @@
 | **Loan Reviewer (human)** | Submits a loan application + a question; reads guidance, decides outcome. |
 | **Compliance Officer (human)** | Reviews high-risk routed cases. Out of scope for v2 UI but the API supports `requires_human_review`. |
 | **LoanFlow System** | The multi-agent pipeline. |
-| **External services** | OpenAI (LLM + embeddings), Pinecone (vector store), MCP-style internal tools (policy, fraud, income). |
+| **Knowledge Base** | Company policy documents (PDF, Confluence, OneDrive). Uploaded once; Pinecone stores the embeddings. |
+| **External services** | OpenAI (LLM + embeddings), Pinecone (vector store), SQLite (application + document records). |
 
 ---
 
@@ -57,7 +61,7 @@
 
 ### UC-4: Run an evaluation suite (offline)
 - A CLI or admin endpoint runs the system against a fixed set of golden test cases and reports pass-rate per dimension (grounding, refusal, citation accuracy, injection resistance).
-- **Acceptance:** ≥10 test cases including 2 prompt-injection attempts and 2 high-risk loans.
+- **Acceptance:** ≥5 test cases including ≥2 prompt-injection attempts and ≥2 high-risk loans.
 
 ---
 
@@ -87,7 +91,7 @@ flowchart TD
 | `InputGuardrail` | raw question | `SanitizedInput { question, redactions[], injection_signals[] }` | none |
 | `PlannerAgent` | LoanApplication + sanitized question | `Plan { specialists_to_run[], rationale }` | none |
 | `RetrievalAgent` | question + plan | `RetrievedContext { chunks[] }` | calls Pinecone via PolicyTool |
-| `DocumentCheckAgent` | LoanApplication + retrieved policy | `DocCheckResult { missing[], present[], required_by_policy[] }` | none |
+| `DocumentCheckAgent` | LoanApplication + loan_type | `DocCheckResult { missing[], present[], required_by_policy[] }` | calls `search_policy` + `extract_requirements` |
 | `RiskReviewAgent` | LoanApplication + DocCheckResult | `RiskAssessment { flags[], severity }` | none |
 | `FraudDetectionAgent` | LoanApplication + RiskAssessment | `FraudFinding { signals[], confidence }` | calls FraudTool |
 | `ReviewerAgent` | all upstream results | `ReviewerGuidance { answer, requires_human_review }` | calls LLM |
@@ -108,31 +112,69 @@ flowchart TD
 
 ---
 
-## 5. Tool / MCP-Style Layer
+## 5. Tool Layer
 
-Tools are the *only* way agents talk to the outside world. v2 introduces an **MCP-aligned tool interface** (same shape as MCP, embedded in-process for speed).
+Tools are the **only** way agents access external data (Pinecone, SQLite). FastAPI routes access SQLite directly. Two paths, two purposes — agents never import the DB session.
 
-```python
-class Tool(Protocol):
-    name: str
-    description: str
-    input_schema: dict  # JSON Schema
-    async def call(self, args: dict) -> dict: ...
+Tools are implemented as a real **MCP server** using FastMCP (`app/core/mcp/server.py`).
+Agents call tools through an **MCP client** (`app/core/mcp/client.py`) over a **stdio transport** — a proper MCP subprocess pipe, not a direct function call.
+
+The client has **zero knowledge** of tool implementations. It only knows tool names and argument shapes. The server is a separate process.
+
+```
+FastAPI startup
+    └── init_mcp_client()
+            ├── spawns:  python -m app.core.mcp.server   (subprocess)
+            ├── opens:   stdio pipe  (real MCP protocol)
+            └── stores:  _session    (shared across all requests)
+
+Agent request
+    └── call_tool("search_policy_tool", {"query": "..."})
+            └── _session.call_tool(...)   [MCP over stdio]
+                    └── MCP Server subprocess
+                            └── search_policy() in registry.py
+                                    └── Pinecone
+                                    └── JSON result back over stdio
+
+FastAPI shutdown
+    └── shutdown_mcp_client()
+            └── closes session + terminates subprocess
 ```
 
-### Tools to implement
+Run the MCP server standalone (connect from Claude Desktop or any MCP client):
+```bash
+cd backend && python -m app.core.mcp.server
+```
 
-| Tool | Purpose | Backed by |
-|---|---|---|
-| `loan_policy_search` | Semantic search over policy docs | Pinecone |
-| `fraud_signal_check` | Mock fraud DB lookup; returns synthetic signals | Local stub |
-| `document_required_lookup` | Returns required docs for a given loan type from policy | Pinecone + parser |
-| `loan_application_lookup` | Fetch a stored loan application by `loan_id` | SQLite (SQLModel) |
-| `submitted_documents_lookup` | Fetch documents submitted for an application | SQLite (SQLModel) |
+### Design principle: policy document is source of truth
 
-> **Learning note (important):** A real MCP server runs over stdio/SSE. v2 keeps the same *interface* but skips the transport, for speed. **Write your tools to the `Tool` Protocol from Day 1** — same code, just structured right from line 1, no separate "refactor" day required. Refactors are for code that didn't know better the first time. You know better.
+No hardcoded business rules in tool code. Required documents, compliance criteria, and review thresholds all come from the uploaded policy document via Pinecone. A different lender uploads their policy PDF → system adapts with zero code changes.
+
+```
+Company Policy PDF → Pinecone (embeddings)
+                          ↓
+              search_policy("required docs for mortgage")
+                          ↓
+              extract_requirements() — LLM reads chunks, returns structured list
+                          ↓
+              DocumentCheckAgent compares against submitted docs
+```
+
+### 5 tools
+
+| MCP Tool name | Implementation fn | Backed by | AI? |
+|---|---|---|---|
+| `search_policy_tool` | `search_policy(query, top_k)` | Pinecone semantic search | No — pure retrieval |
+| `extract_requirements_tool` | `extract_requirements(loan_type, policy_chunks)` | LLM reads policy chunks | Yes — extracts required doc list |
+| `check_fraud_signals_tool` | `check_fraud_signals(loan_amount, annual_income, ...)` | Rule-based thresholds | No — deterministic math |
+| `get_loan_application_tool` | `get_loan_application(loan_id)` | SQLite | No |
+| `get_submitted_documents_tool` | `get_submitted_documents(loan_id)` | SQLite | No |
+
+> **Why is `check_fraud_signals` still rule-based?**
+> Fraud thresholds (income ratio > 5, credit < 600 + high loan) are bank risk department rules — mathematical, not interpretive. Using an LLM for arithmetic adds cost, latency, and non-determinism with no benefit. Deterministic = testable and auditable.
 >
-> **Architectural rule:** agents access data through tools; FastAPI routes can talk to SQLModel directly. Two paths, two purposes. Don't let agents `import` the DB session.
+> **Why is `extract_requirements` AI-driven?**
+> Document requirements differ by loan type, lender, and jurisdiction. Hardcoding `["pay_stub", "bank_statement", "id"]` means the code must change every time policy changes. Retrieving from Pinecone and asking the LLM to extract the list means the policy PDF is the only thing that needs updating.
 
 ---
 
@@ -262,7 +304,7 @@ Add a **Redux Toolkit** slice (`reviewSlice`) holding the latest review's full r
 - Real authentication / multi-tenant
 - Real fraud DB integration
 - Production deployment, CI/CD, observability stack
-- Real MCP server transport (stdio/SSE)
+- SSE/HTTP MCP transport (v2 uses stdio; SSE is a future transport swap)
 - Mobile UI
 - Document extraction beyond what `submitted_documents.parsed_fields` carries
 - Standalone `IncomeVerificationAgent` (income/loan ratio handled in `RiskReviewAgent` instead)
@@ -281,7 +323,8 @@ These belong in a "Future Work" section of the README. Several are picked up imp
 - [ ] PlannerAgent makes routing decisions based on rules in §4
 - [ ] InputGuardrail with PII redaction, injection markers, delimiter discipline
 - [ ] OutputGuardrail with forbidden-phrase, citation-honesty, PII-scrub checks
-- [ ] MCP-style tool layer with **5 tools** (per §5), all conforming to the `Tool` Protocol from Day 1
+- [ ] Real MCP server (`app/core/mcp/server.py`) with 5 tools: `search_policy_tool`, `extract_requirements_tool`, `check_fraud_signals_tool`, `get_loan_application_tool`, `get_submitted_documents_tool`
+- [ ] MCP client (`app/core/mcp/client.py`) connecting via stdio — agents call `call_tool()`, never import tool implementations
 - [ ] Persistence: SQLite + SQLModel with seed script (≥6 scenarios from §6a)
 - [ ] Eval suite with **≥5 cases**, including **≥2 injection attempts**
 - [ ] Trace panel added to existing UI showing agents, citations, guardrails, evaluation

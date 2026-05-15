@@ -4,8 +4,16 @@ import uuid
 from app.services.embedding_service import create_embedding
 from pinecone import Pinecone
 
-pc= Pinecone(api_key=os.getenv("PINECONE_API_KEY"))
-index = pc.Index(os.getenv("PINECONE_INDEX_NAME"))
+_pc = None
+_index = None
+
+
+def get_index():
+    global _pc, _index
+    if _index is None:
+        _pc = Pinecone(api_key=os.getenv("PINECONE_API_KEY"))
+        _index = _pc.Index(os.getenv("PINECONE_INDEX_NAME"))
+    return _index
 
 def store_document_chunks(document_id: str, filename: str, chunks: list[str]):
     vectors = []
@@ -26,6 +34,6 @@ def store_document_chunks(document_id: str, filename: str, chunks: list[str]):
             }
         )
 
-    index.upsert(vectors=vectors)
+    get_index().upsert(vectors=vectors)
 
     return len(vectors)

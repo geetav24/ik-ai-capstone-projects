@@ -1,187 +1,211 @@
-# app/workflows/langgraph_workflow.py
+"""
+LoanFlow v2 — LangGraph workflow with conditional routing (USE_CASES.md §4).
 
-from langgraph.graph import StateGraph, END
-from app.llm_client import ask_llm
-from app.tools.loan_policy_tool import loan_policy_tool
-from app.llm_client import judge_response
+Architecture (copy this into README):
 
-async def retrieval_agent(state: dict) -> dict:
-    question = state.get("question", "")
+    InputGuardrail → PlannerAgent → RetrievalAgent → DocumentCheckAgent
+        → RiskReviewAgent → [conditional] → FraudDetectionAgent (optional)
+            → ReviewerAgent → OutputGuardrail → [conditional]
+                → EvaluationAgent → END
+                (violation path: SafeFallback → EvaluationAgent → END)
 
-    retrieved_context = loan_policy_tool(question)
+Key LangGraph concepts used here:
+  - StateGraph:           the graph builder; nodes + edges defined on it
+  - add_node:             registers a coroutine as a named graph node
+  - add_edge:             unconditional A → B transition
+  - add_conditional_edges: calls a routing function to pick next node
+  - set_entry_point:      first node to run
+  - compile():            returns an executable Runnable (call .ainvoke())
+"""
+import asyncio
+from datetime import datetime, timezone
+from typing import Literal
 
-    state["agent_trace"].append("LoanPolicyTool called")
+from langgraph.graph import END, StateGraph
 
-    state["retrieved_context"] = retrieved_context
-    state["agent_trace"].append("RetrievalAgent completed")
+from app.agents.document_check_agent import document_check_agent
+from app.agents.evaluation_agent import evaluation_agent
+from app.agents.fraud_detection_agent import fraud_detection_agent
+from app.agents.input_guardrail import input_guardrail_agent
+from app.agents.output_guardrail import output_guardrail_agent
+from app.agents.planner_agent import planner_agent
+from app.agents.retrieval_agent import retrieval_agent
+from app.agents.reviewer_agent import reviewer_agent
+from app.agents.risk_review_agent import risk_review_agent
+from app.models.v2_models import LoanReviewResponse, ReviewerGuidance
+from app.workflows.state import LoanReviewState
 
-    return state
+# Routing thresholds (must match planner_agent.py constants)
+HIGH_LOAN_THRESHOLD = 500_000
+INCOME_RATIO_THRESHOLD = 5.0
 
-async def document_check_agent(state: dict) -> dict:
+SAFE_FALLBACK_ANSWER = (
+    "Unable to produce guidance for this application. "
+    "Please escalate for manual review."
+)
+
+
+def should_run_fraud(state: LoanReviewState) -> Literal["fraud_detection", "reviewer"]:
     """
-    TODO: Later you will implement real document logic here.
-    For now, this proves LangGraph node is running.
+    Decide whether to run the fraud specialist after risk review.
+
+    Conditions (if any true → run fraud_detection):
+      1. loan_amount > HIGH_LOAN_THRESHOLD
+      2. annual_income > 0 and loan_amount / annual_income > INCOME_RATIO_THRESHOLD
+      3. annual_income == 0
+      4. employment_status == "self_employed" and loan_amount > 200_000
+      5. "income_ratio_anomaly" in risk flags
+      6. "velocity_anomaly" in risk flags
     """
-    state["missing_documents"] = []
+    app = state.get("application", {}) or {}
+    loan_amount = float(app.get("loan_amount") or 0)
+    annual_income = float(app.get("annual_income") or 0)
+    employment_status = app.get("employment_status", "")
 
-    question = state.get("question", "").lower()
+    ra = state.get("risk_assessment") or {}
+    flags = ra.get("flags", []) if ra else []
+    flag_types = {f.get("flag_type") for f in flags if isinstance(f, dict)}
 
-    if "bank" in question or "statement" in question:
-        state["missing_documents"].append("bank_statements")
+    conds = [
+        loan_amount > HIGH_LOAN_THRESHOLD,
+        (annual_income > 0 and (loan_amount / annual_income) > INCOME_RATIO_THRESHOLD),
+        annual_income == 0,
+        (employment_status == "self_employed" and loan_amount > 200_000),
+        ("income_ratio_anomaly" in flag_types),
+        ("velocity_anomaly" in flag_types),
+    ]
 
-    state["agent_trace"].append("DocumentCheckAgent completed")
-    return state
-
-
-async def risk_review_agent(state: dict) -> dict:
-    risk_flags = []
-
-    if state["credit_score"] < 700:
-        risk_flags.append("low_credit_score")
-
-    if state["loan_amount"] > 500000:
-        risk_flags.append("high_loan_amount")
-
-    state["risk_flags"] = risk_flags
-
-    state["agent_trace"].append("RiskReviewAgent completed")
-
-    return state
+    return "fraud_detection" if any(conds) else "reviewer"
 
 
-async def reviewer_agent(state: dict) -> dict:
-    retrieved_context_text = "\n\n".join(
-        [
-            f"Source: {item.get('filename')} | Chunk: {item.get('chunk_index')}\n{item.get('text')}"
-            for item in state.get("retrieved_context", [])
-        ]
+def should_use_safe_fallback(state: LoanReviewState) -> Literal["evaluation", "safe_fallback"]:
+    """
+    If the output guardrail failed, route to `safe_fallback`, otherwise to `evaluation`.
+    """
+    result = state.get("guardrail_result") or {}
+    if result.get("passed", True):
+        return "evaluation"
+    return "safe_fallback"
+
+
+async def safe_fallback_node(state: LoanReviewState) -> dict:
+    """
+    Simple node that injects a safe fallback answer. Used when guardrails fail.
+    """
+    return {
+        "reviewer_guidance": {
+            "answer": SAFE_FALLBACK_ANSWER,
+            "requires_human_review": True,
+        },
+        "agent_trace": [{
+            "agent": "safe_fallback",
+            "started_at": datetime.now(timezone.utc).isoformat(),
+            "finished_at": datetime.now(timezone.utc).isoformat(),
+            "input_summary": "guardrail violation detected",
+            "output_summary": "safe fallback answer injected",
+        }],
+        "guardrails_applied": ["output_guardrail_fallback"],
+    }
+
+
+async def parallel_specialists_node(state: LoanReviewState) -> dict:
+    """
+    Run retrieval, document_check, and risk_review concurrently.
+
+    These three agents are fully independent — none reads the other's output.
+    asyncio.gather cuts wall-clock time from ~25s sequential to ~10s.
+    """
+    results = await asyncio.gather(
+        retrieval_agent(state),
+        document_check_agent(state),
+        risk_review_agent(state),
     )
+    merged: dict = {}
+    for r in results:
+        for key, val in r.items():
+            if key == "agent_trace" and isinstance(val, list):
+                merged.setdefault("agent_trace", []).extend(val)
+            else:
+                merged[key] = val
+    return merged
 
-    prompt = f"""
-            You are a loan review assistant.
 
-            Retrieved policy context:
-            {retrieved_context_text}
+def build_workflow() -> StateGraph:
+    """
+    Register nodes and edges and return a compiled StateGraph.
+    """
+    workflow = StateGraph(LoanReviewState)
 
-            Loan details:
-            - Loan ID: {state.get("loan_id")}
-            - Borrower: {state.get("borrower_name")}
-            - Loan Amount: {state.get("loan_amount")}
-            - Annual Income: {state.get("annual_income")}
-            - Credit Score: {state.get("credit_score")}
+    # Register nodes
+    workflow.add_node("input_guardrail",      input_guardrail_agent)
+    workflow.add_node("planner",              planner_agent)
+    workflow.add_node("parallel_specialists", parallel_specialists_node)
+    workflow.add_node("fraud_detection",      fraud_detection_agent)
+    workflow.add_node("reviewer",             reviewer_agent)
+    workflow.add_node("output_guardrail",     output_guardrail_agent)
+    workflow.add_node("safe_fallback",        safe_fallback_node)
+    workflow.add_node("evaluation",           evaluation_agent)
 
-            Detected missing documents:
-            {state.get("missing_documents", [])}
+    # Entry point
+    workflow.set_entry_point("input_guardrail")
 
-            Detected risk flags:
-            {state.get("risk_flags", [])}
+    # Linear backbone → parallel fan-out
+    workflow.add_edge("input_guardrail",      "planner")
+    workflow.add_edge("planner",              "parallel_specialists")
 
-            Reviewer question:
-            {state.get("question")}
-
-            Write safe reviewer guidance.
-            Do not approve or reject the loan.
-            """
-    answer = await ask_llm(prompt)
-
-    citations = [
+    # Conditional: fraud or skip to reviewer
+    workflow.add_conditional_edges(
+        "parallel_specialists",
+        should_run_fraud,
         {
-            "filename": item.get("filename"),
-            "chunk_index": item.get("chunk_index"),
-            "score": item.get("score"),
-        }
-        for item in state.get("retrieved_context", [])
-    ]
-    state["citations"] = citations
-    state["answer"] = answer
-
-    state["agent_trace"].append("LoanPolicyTool called")
-    state["agent_trace"].append("ReviewerAgent completed")
-
-    return state
-
-async def guardrail_agent(state: dict) -> dict:
-    state["requires_human_review"] = True
-    state["guardrails_applied"] = [
-        "no_final_approval",
-        "human_review_required"
-    ]
-    state["agent_trace"].append("GuardrailAgent completed")
-    return state
-
-async def evaluation_agent(state: dict) -> dict:
-    retrieved_context_text = "\n\n".join(
-        [
-            f"Source: {item.get('filename')} | Chunk: {item.get('chunk_index')}\n{item.get('text')}"
-            for item in state.get("retrieved_context", [])
-        ]
+            "fraud_detection": "fraud_detection",
+            "reviewer":        "reviewer",
+        },
     )
+    workflow.add_edge("fraud_detection", "reviewer")
 
-    prompt = f"""
-        Evaluate the AI loan review response.
+    # Reviewer → OutputGuardrail
+    workflow.add_edge("reviewer", "output_guardrail")
 
-        Loan details:
-        - Loan ID: {state.get("loan_id")}
-        - Borrower: {state.get("borrower_name")}
-        - Loan Amount: {state.get("loan_amount")}
-        - Annual Income: {state.get("annual_income")}
-        - Credit Score: {state.get("credit_score")}
+    # Conditional: output guardrail pass/fail
+    workflow.add_conditional_edges(
+        "output_guardrail",
+        should_use_safe_fallback,
+        {
+            "evaluation":    "evaluation",
+            "safe_fallback": "safe_fallback",
+        },
+    )
+    workflow.add_edge("safe_fallback", "evaluation")
+    workflow.add_edge("evaluation",    END)
 
-        Detected missing documents:
-        {state.get("missing_documents", [])}
-
-        Detected risk flags:
-        {state.get("risk_flags", [])}
-
-        Retrieved policy context:
-        {retrieved_context_text}
-
-        AI answer:
-        {state.get("answer")}
-
-        Evaluate whether the answer:
-        1. Avoids approving or rejecting the loan
-        2. Correctly identifies missing documents
-        3. Correctly identifies risk signals
-        4. Uses retrieved policy context
-        5. Avoids unsupported claims
-        6. Routes the loan to human review when appropriate
-
-        Return ONLY valid JSON in this exact structure:
-        {{
-        "decision_quality": "safe | risky | unsafe",
-        "policy_compliance": "passed | failed",
-        "hallucination_risk": "low | medium | high",
-        "grounding_score": 0.0,
-        "reasoning": "short explanation"
-        }}
-        """
-
-    evaluation = await judge_response(prompt)
-
-    state["evaluation"] = evaluation
-    state["agent_trace"].append("EvaluationAgent completed with LLM-as-Judge")
-
-    return state
-
-def build_graph():
-    graph = StateGraph(dict)
-    graph.add_node("retrieval_agent", retrieval_agent)
-    graph.add_node("document_check", document_check_agent)
-    graph.add_node("risk_review", risk_review_agent)
-    graph.add_node("guardrail", guardrail_agent)
-    graph.add_node("reviewer", reviewer_agent)
-    graph.add_node("evaluation", evaluation_agent)
-
-    graph.set_entry_point("retrieval_agent")
-    graph.add_edge("retrieval_agent", "document_check")
-    graph.add_edge("document_check", "risk_review")
-    graph.add_edge("risk_review", "guardrail")
-    graph.add_edge("guardrail", "reviewer")
-    graph.add_edge("reviewer", "evaluation")
-    graph.add_edge("evaluation", END)
-
-    return graph.compile()
+    return workflow
 
 
-loan_review_graph = build_graph()
+# Compile graph once at import time (used by FastAPI route)
+graph = build_workflow().compile()
+
+
+async def run_loan_review(application: dict, question: str) -> LoanReviewState:
+    """
+    Execute the full pipeline and return the final state.
+    """
+    initial_state: LoanReviewState = {
+        "application":       application,
+        "raw_question":      question,
+        "sanitized_input":   None,
+        "injection_signals": [],
+        "plan":              None,
+        "retrieved_context": None,
+        "doc_check_result":  None,
+        "risk_assessment":   None,
+        "fraud_finding":     None,
+        "reviewer_guidance": None,
+        "guardrail_result":  None,
+        "agent_trace":       [],
+        "guardrails_applied": [],
+        "evaluation":        None,
+    }
+
+    final_state: LoanReviewState = await graph.ainvoke(initial_state)
+    return final_state

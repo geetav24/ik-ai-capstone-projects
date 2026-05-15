@@ -5,9 +5,22 @@ IMPORTANT: Never hit real OpenAI or Pinecone in tests.
 Mock those at the boundary (llm_client functions, tool registry).
 Tests should be fast, free, and deterministic.
 """
+import sys
+from pathlib import Path
+
 import pytest
 from decimal import Decimal
 from datetime import datetime, timezone
+
+from dotenv import load_dotenv
+
+load_dotenv()
+
+# mcp-server/ is a top-level sibling of backend/ — add it so tests can import
+# mcp_server.registry directly (unit tests bypass the MCP subprocess).
+_MCP_SERVER_ROOT = str(Path(__file__).resolve().parents[2] / "mcp-server")
+if _MCP_SERVER_ROOT not in sys.path:
+    sys.path.insert(0, _MCP_SERVER_ROOT)
 
 from app.models.v2_models import LoanApplication, SubmittedDocument
 

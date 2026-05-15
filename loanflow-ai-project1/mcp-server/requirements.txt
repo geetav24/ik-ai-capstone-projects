@@ -1,0 +1,5 @@
+mcp[cli]>=1.0.0
+openai>=1.30.0
+pinecone
+sqlmodel>=0.0.21
+python-dotenv==1.0.1
