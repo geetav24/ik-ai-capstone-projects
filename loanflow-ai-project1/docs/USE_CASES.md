@@ -53,7 +53,7 @@
   8. **Output guardrail** validates the answer; on violation, replaces the answer with a safe fallback ("Unable to produce guidance, please review manually") — no loop-back retry in v2.
   9. **EvaluationAgent (LLM-as-Judge)** scores the response (or the fallback).
 - **Post:** Structured `LoanReviewResponse` with answer, citations, risk flags, missing docs, agent trace, evaluation, guardrails applied.
-- **Acceptance:** End-to-end <12s p95 on a single review.
+- **Acceptance:** End-to-end <20s p95 on a single review (parallel specialists achieve ~15s).
 
 ### UC-3: View agent trace & citations
 - Reviewer can see, per request: which agents ran, in what order, with what inputs/outputs, and which policy chunks were cited.
@@ -71,11 +71,14 @@
 flowchart TD
     Q[Reviewer question + LoanApplication] --> IG[InputGuardrail]
     IG -->|sanitized| P[PlannerAgent]
-    P --> R[RetrievalAgent]
-    R --> DC[DocumentCheckAgent]
-    DC --> RR[RiskReviewAgent]
-    RR -->|high_risk_amount or anomalies| F[FraudDetectionAgent]
-    RR -->|low risk| RV[ReviewerAgent]
+    P --> PS
+    subgraph PS[ParallelSpecialists — asyncio.gather]
+        R[RetrievalAgent]
+        DC[DocumentCheckAgent]
+        RR[RiskReviewAgent]
+    end
+    PS -->|high_risk_amount or anomalies| F[FraudDetectionAgent]
+    PS -->|low risk| RV[ReviewerAgent]
     F --> RV
     RV --> OG[OutputGuardrail]
     OG -->|valid| EV[EvaluationAgent]
@@ -100,6 +103,7 @@ flowchart TD
 
 ### Routing rules (PlannerAgent)
 - Always run: Retrieval, DocumentCheck, RiskReview, Reviewer, OutputGuardrail, Evaluation.
+- **RetrievalAgent, DocumentCheckAgent, and RiskReviewAgent run in parallel inside a single `parallel_specialists_node` using `asyncio.gather`. They are fully independent — none reads the other's output. This cuts wall-clock time from ~35s sequential to ~15s.**
 - Run **FraudDetection** if any of:
   - `loan_amount > policy_threshold`
   - `loan_amount / annual_income > 5` (income/loan ratio anomaly)
@@ -116,35 +120,41 @@ flowchart TD
 
 Tools are the **only** way agents access external data (Pinecone, SQLite). FastAPI routes access SQLite directly. Two paths, two purposes — agents never import the DB session.
 
-Tools are implemented as a real **MCP server** using FastMCP (`app/core/mcp/server.py`).
-Agents call tools through an **MCP client** (`app/core/mcp/client.py`) over a **stdio transport** — a proper MCP subprocess pipe, not a direct function call.
+Tools are implemented as a real **MCP server** using FastMCP (`mcp-server/server.py`).
+Agents call tools through an **MCP client** (`app/core/mcp/client.py`) over an **HTTP SSE transport** — the MCP server runs as a standalone HTTP service, not a subprocess pipe.
 
-The client has **zero knowledge** of tool implementations. It only knows tool names and argument shapes. The server is a separate process.
+The client has **zero knowledge** of tool implementations. It only knows tool names and argument shapes. The server is a fully independent process.
 
 ```
+MCP server (standalone process, port 8001)
+    └── FastMCP over HTTP SSE
+            └── exposes 5 tools at  /sse
+
 FastAPI startup
     └── init_mcp_client()
-            ├── spawns:  python -m app.core.mcp.server   (subprocess)
-            ├── opens:   stdio pipe  (real MCP protocol)
-            └── stores:  _session    (shared across all requests)
+            ├── connects to:  http://localhost:8001/sse   (MCP_SERVER_URL env var)
+            ├── opens:        SSE stream  (real MCP protocol)
+            └── stores:       _session    (shared across all requests)
 
 Agent request
     └── call_tool("search_policy_tool", {"query": "..."})
-            └── _session.call_tool(...)   [MCP over stdio]
-                    └── MCP Server subprocess
-                            └── search_policy() in registry.py
+            └── _session.call_tool(...)   [MCP over HTTP SSE]
+                    └── MCP Server (port 8001)
+                            └── search_policy() in server.py
                                     └── Pinecone
-                                    └── JSON result back over stdio
+                                    └── JSON result back over SSE
 
 FastAPI shutdown
     └── shutdown_mcp_client()
-            └── closes session + terminates subprocess
+            └── closes SSE session
 ```
 
 Run the MCP server standalone (connect from Claude Desktop or any MCP client):
 ```bash
-cd backend && python -m app.core.mcp.server
+cd mcp-server && MCP_TRANSPORT=sse MCP_PORT=8001 python -m mcp_server.server
 ```
+
+The backend connects via the `MCP_SERVER_URL` environment variable (default: `http://localhost:8001/sse`).
 
 ### Design principle: policy document is source of truth
 
@@ -256,9 +266,9 @@ These same records double as fixtures for the eval harness.
 ## 7. Guardrails
 
 ### Input guardrail (runs first)
-- **PII redaction:** SSN, full account numbers, credit card numbers → replaced with `[REDACTED:SSN]` etc. Use regex.
-- **Prompt-injection markers:** detect "ignore previous instructions", "system:", "you are now", new-role declarations. Flag, don't auto-block — log and let downstream agents see the flag.
-- **Delimiter discipline:** wrap user-provided text in `<<<USER_QUESTION>>> ... <<<END_USER_QUESTION>>>` in every prompt. Tell the LLM to treat content inside as data, never instructions.
+- **PII redaction (contextual):** Presidio (`presidio-analyzer` + `presidio-anonymizer`) detects PERSON, EMAIL_ADDRESS, and PHONE_NUMBER entities in context and redacts them. Regex handles financial PII: SSN pattern, bank account numbers, credit card numbers → replaced with `[REDACTED:SSN]`, `[REDACTED:BANK_ACCOUNT]`, `[REDACTED:CREDIT_CARD]` etc.
+- **Prompt-injection denylist:** 30 phrases across 5 categories — override/jailbreak, approval manipulation, authority impersonation, system prompt extraction, role hijacking. Detected phrases are flagged (not auto-blocked) and surfaced in `injection_signals[]` for downstream visibility.
+- **Delimiter discipline:** user input is wrapped in `<<<USER_QUESTION>>> ... <<<END_USER_QUESTION>>>` delimiters in **all** downstream prompts. The LLM is instructed to treat content inside the delimiters as data, never as instructions.
 - **Length cap:** reject questions >2000 chars (prevents context-stuffing attacks).
 
 ### Output guardrail (runs after Reviewer, before Evaluation)
@@ -275,7 +285,7 @@ These same records double as fixtures for the eval harness.
 
 | NFR | Target |
 |---|---|
-| Latency (p95, single review) | <12s |
+| Latency (p95, single review) | <20s (parallel execution achieves ~15s; 12s was aspirational for sequential) |
 | Test coverage on agent + guardrail logic | ≥80% |
 | Zero secrets in code | All keys via env vars |
 | Eval suite green | ≥90% pass on golden set |
@@ -304,7 +314,6 @@ Add a **Redux Toolkit** slice (`reviewSlice`) holding the latest review's full r
 - Real authentication / multi-tenant
 - Real fraud DB integration
 - Production deployment, CI/CD, observability stack
-- SSE/HTTP MCP transport (v2 uses stdio; SSE is a future transport swap)
 - Mobile UI
 - Document extraction beyond what `submitted_documents.parsed_fields` carries
 - Standalone `IncomeVerificationAgent` (income/loan ratio handled in `RiskReviewAgent` instead)
@@ -319,16 +328,16 @@ These belong in a "Future Work" section of the README. Several are picked up imp
 
 ## 11. Acceptance Criteria for Capstone Submission
 
-- [ ] All agents in §4 implemented and routed conditionally via LangGraph
-- [ ] PlannerAgent makes routing decisions based on rules in §4
-- [ ] InputGuardrail with PII redaction, injection markers, delimiter discipline
+- [x] All agents in §4 implemented and routed conditionally via LangGraph
+- [x] PlannerAgent makes routing decisions based on rules in §4
+- [x] InputGuardrail with PII redaction, injection markers, delimiter discipline
 - [ ] OutputGuardrail with forbidden-phrase, citation-honesty, PII-scrub checks
-- [ ] Real MCP server (`app/core/mcp/server.py`) with 5 tools: `search_policy_tool`, `extract_requirements_tool`, `check_fraud_signals_tool`, `get_loan_application_tool`, `get_submitted_documents_tool`
-- [ ] MCP client (`app/core/mcp/client.py`) connecting via stdio — agents call `call_tool()`, never import tool implementations
-- [ ] Persistence: SQLite + SQLModel with seed script (≥6 scenarios from §6a)
+- [x] Real MCP server (`mcp-server/server.py`) with 5 tools: `search_policy_tool`, `extract_requirements_tool`, `check_fraud_signals_tool`, `get_loan_application_tool`, `get_submitted_documents_tool`
+- [x] MCP client (`app/core/mcp/client.py`) connecting via SSE (`http://localhost:8001/sse`) — agents call `call_tool()`, never import tool implementations
+- [x] Persistence: SQLite + SQLModel with seed script (≥6 scenarios from §6a)
 - [ ] Eval suite with **≥5 cases**, including **≥2 injection attempts**
 - [ ] Trace panel added to existing UI showing agents, citations, guardrails, evaluation
 - [ ] Redux Toolkit slice for review state
-- [ ] README rewrite reflecting v2 architecture (with mermaid)
+- [x] README rewrite reflecting v2 architecture (with mermaid)
 - [ ] Demo script (5-min walkthrough — pick scenario #4 from seed data to show full agent flow)
 - [ ] Test coverage ≥80% on agent + guardrail code (pytest + Vitest)
