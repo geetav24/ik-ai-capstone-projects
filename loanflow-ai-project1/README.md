@@ -11,6 +11,19 @@ LoanFlow AI is a production-style multi-agent system that automates loan applica
 
 ---
 
+## Screenshots
+
+### Loan Review Form — LN-004 (High Risk Mortgage)
+![Loan Review Form](docs/screenshots/loan-review-form.png)
+
+### Risk Flags, Fraud Signals & LLM-as-Judge Evaluation
+![Risk and Fraud Signals](docs/screenshots/risk-fraud-signals.png)
+
+### Agent Trace — 9 Steps with Grounding Score 80%
+![Agent Trace](docs/screenshots/agent-trace.png)
+
+---
+
 ## Architecture
 
 ```mermaid
