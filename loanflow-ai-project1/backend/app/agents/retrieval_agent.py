@@ -46,48 +46,52 @@ async def retrieval_agent(state: LoanReviewState) -> dict:
         system_prompt=system_prompt,
         user_prompt=user_prompt,
     )
-    # Defensive parsing: accept several shapes and provide clear diagnostics on failure.
-    raw_content = None
-    try:
-        if not result:
-            raw_content = None
-        else:
-            # run_with_tools returns a dict with a 'content' key (string)
-            raw_content = result.get("content")
-    except Exception:
-        raw_content = None
-    # The LLM's final answer is the retrieved chunks — no tool name reference needed.
+
     chunks_raw = []
     tool_errors = []
-    # Inspect tool call diagnostics for common failure modes (missing creds, db errors)
-    if isinstance(result, dict):
-        for call in result.get("tool_calls_made", []) or []:
-            res = str(call.get("result") if isinstance(call, dict) else call)
-            if res and ("Missing credentials" in res or "Error executing tool" in res or "no such table" in res):
-                tool_errors.append(res[:1000])
 
-    if raw_content:
-        try:
-            chunks_raw = json.loads(raw_content)
-            if not isinstance(chunks_raw, list):
-                raise ValueError("expected a JSON array")
-        except Exception as e:
-            # Log full diagnostic to help prompt tuning / tool debugging
-            logger.warning(
-                "RetrievalAgent: failed to parse LLM/tool response as JSON chunks. Returning empty chunks. Raw response (truncated 500 chars): %s. Error: %s",
-                (raw_content[:500] if isinstance(raw_content, str) else repr(raw_content)),
-                str(e),
-            )
-            chunks_raw = []
-    else:
-        if tool_errors:
-            logger.warning("RetrievalAgent: tool errors detected: %s", tool_errors)
-        else:
-            logger.warning(
-                "RetrievalAgent: empty response from run_with_tools. Result object: %s",
-                repr(result),
-            )
-        chunks_raw = []
+    if isinstance(result, dict):
+        # --- Strategy 1: extract chunks directly from tool call results (most reliable)
+        # gpt-4o-mini often writes natural language in `content` instead of JSON,
+        # so we pull the raw Pinecone results from tool_calls_made directly.
+        for call in result.get("tool_calls_made", []) or []:
+            call_result = call.get("result") if isinstance(call, dict) else None
+            # Check for tool errors first
+            res_str = str(call_result)
+            if res_str and ("Missing credentials" in res_str or "Error executing tool" in res_str or "no such table" in res_str):
+                tool_errors.append(res_str[:1000])
+                continue
+            # search_policy_tool returns a list of chunk dicts directly
+            if isinstance(call_result, list) and call_result:
+                chunks_raw.extend(call_result)
+
+        # --- Strategy 2: fall back to parsing LLM content as JSON (if tool result was empty)
+        if not chunks_raw:
+            raw_content = result.get("content", "")
+            if raw_content:
+                try:
+                    stripped = raw_content.strip()
+                    if stripped.startswith("```"):
+                        stripped = stripped.split("\n", 1)[1].rsplit("```", 1)[0].strip()
+                    parsed = json.loads(stripped)
+                    if isinstance(parsed, list):
+                        chunks_raw = parsed
+                    else:
+                        raise ValueError("expected JSON array")
+                except Exception as e:
+                    logger.warning(
+                        "RetrievalAgent: JSON parse fallback failed. Raw (500 chars): %s. Error: %s",
+                        raw_content[:500],
+                        str(e),
+                    )
+
+    if tool_errors:
+        logger.warning("RetrievalAgent: tool errors detected: %s", tool_errors)
+    if not chunks_raw and not tool_errors:
+        logger.warning(
+            "RetrievalAgent: no chunks from tool calls or content. Result: %s",
+            repr(result),
+        )
 
     # Build Citation objects (be defensive about missing fields)
     citations = []

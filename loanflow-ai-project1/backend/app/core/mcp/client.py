@@ -49,7 +49,7 @@ def _make_transport_cm():
     Read at call time (not import time) so the test fixture can override
     MCP_SERVER_URL before init_mcp_client() is called.
     """
-    url = os.getenv("MCP_SERVER_URL", "http://localhost:8091/sse")
+    url = os.getenv("MCP_SERVER_URL", "http://localhost:8001/sse")
     headers: dict[str, str] = {}
     if api_key := os.getenv("MCP_API_KEY"):
         headers["Authorization"] = f"Bearer {api_key}"
