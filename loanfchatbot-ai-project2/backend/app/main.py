@@ -2,8 +2,7 @@
 LoanInquiry AI — FastAPI backend.
 
 Endpoints:
-  POST /chat          — v1 single-agent (preserved for backwards compat)
-  POST /v2/chat       — v2 multi-agent Google ADK pipeline
+  POST /v2/chat       — multi-agent Google ADK pipeline
   DELETE /chat/{sid}  — clear session memory
   GET  /sessions      — list active sessions
   GET  /health        — health check
@@ -20,13 +19,10 @@ load_dotenv(Path(__file__).resolve().parents[1] / ".env")
 
 from app.models.models import (
     AgentTraceEntry,
-    ChatRequest,
-    ChatResponse,
     ChatMessage,
     V2ChatRequest,
     V2ChatResponse,
 )
-from app.agent.loan_inquiry_agent import run_inquiry
 from app.agents.input_guardrail import input_guardrail_agent
 from app.core.session_store import delete, get_or_create, list_sessions
 from app.workflows.adk_workflow import run_adk_inquiry
@@ -50,15 +46,6 @@ app.add_middleware(
 @app.get("/health")
 def health():
     return {"status": "ok", "service": "LoanInquiry AI", "version": "2.0"}
-
-
-# ---------------------------------------------------------------------------
-# v1 — single-agent endpoint (preserved)
-# ---------------------------------------------------------------------------
-
-@app.post("/chat", response_model=ChatResponse)
-async def chat(request: ChatRequest):
-    return await run_inquiry(request)
 
 
 # ---------------------------------------------------------------------------

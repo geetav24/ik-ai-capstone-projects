@@ -1,8 +1,5 @@
 """
-LoanInquiry data contracts.
-
-v1 models — used by /chat (single-agent)
-v2 models — used by /v2/chat (multi-agent LangGraph pipeline)
+LoanInquiry data contracts — used by /v2/chat (Google ADK pipeline).
 """
 from __future__ import annotations
 from datetime import datetime
@@ -46,30 +43,7 @@ class WebResult(BaseModel):
 
 
 # ---------------------------------------------------------------------------
-# v1 — single-agent contracts (preserved for backwards compatibility)
-# ---------------------------------------------------------------------------
-
-class ChatRequest(BaseModel):
-    session_id: str
-    message: str
-    memory_type: Literal["buffer", "summary"] = "buffer"
-
-
-class ToolCall(BaseModel):
-    tool_name: str
-    args: dict
-    result: str | list | dict
-
-
-class ChatResponse(BaseModel):
-    session_id: str
-    answer: str
-    tool_calls: list[ToolCall] = []
-    memory_snapshot: list[ChatMessage] = []
-
-
-# ---------------------------------------------------------------------------
-# v2 — multi-agent LangGraph contracts
+# v2 — multi-agent ADK contracts
 # ---------------------------------------------------------------------------
 
 IntentType = Literal["policy", "status", "web", "eligibility", "general"]
@@ -82,14 +56,6 @@ class AgentTraceEntry(BaseModel):
     finished_at: datetime
     input_summary: str
     output_summary: str
-
-
-class EligibilityResult(BaseModel):
-    """Output of EligibilityAgent — policy-grounded loan limit estimate."""
-    eligible: bool
-    max_loan_amount: float | None = None
-    reason: str
-    policy_citations: list[str] = []
 
 
 class InquiryState(TypedDict, total=False):
