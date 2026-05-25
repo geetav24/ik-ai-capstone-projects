@@ -1,0 +1,836 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>LoanFlow AI — Capstone Presentation v2</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: 'Segoe UI', Arial, sans-serif; background: #1a1a2e; color: #eee; }
+.deck { width: 100%; }
+.slide {
+  width: 100vw; min-height: 100vh;
+  display: flex; flex-direction: column; justify-content: center; align-items: center;
+  padding: 60px 80px;
+  page-break-after: always;
+  border-bottom: 2px solid #333;
+}
+.slide-title   { background: linear-gradient(135deg, #0f3460 0%, #16213e 60%, #0f3460 100%); }
+.slide-problem { background: linear-gradient(135deg, #1a1a2e, #16213e); }
+.slide-arch    { background: #12192b; }
+.slide-agents  { background: #0d1b2a; }
+.slide-design  { background: #1b1a2e; }
+.slide-guard   { background: #1a0a1e; }
+.slide-eval    { background: #0a1e1a; }
+.slide-perf    { background: #1a1500; }
+.slide-demo    { background: #001a0a; }
+.slide-stack   { background: #0a0a1e; }
+.slide-future  { background: #1e0a0a; }
+.slide-end     { background: linear-gradient(135deg, #0f3460 0%, #16213e 100%); }
+h1 { font-size: 3rem; font-weight: 800; text-align: center; line-height: 1.2; }
+h2 { font-size: 2rem; font-weight: 700; margin-bottom: 0.4em; color: #4fc3f7; }
+h3 { font-size: 1.3rem; font-weight: 600; color: #81d4fa; margin-bottom: 0.3em; }
+p  { font-size: 1.05rem; line-height: 1.7; color: #ccc; max-width: 900px; text-align: center; }
+ul { list-style: none; width: 100%; max-width: 900px; }
+ul li { padding: 6px 0 6px 24px; position: relative; font-size: 1rem; color: #ddd; line-height: 1.5; }
+ul li::before { content: "▸"; position: absolute; left: 0; color: #4fc3f7; }
+.subtitle { font-size: 1.3rem; color: #90caf9; margin-top: 12px; text-align: center; }
+.byline   { font-size: 1rem; color: #78909c; margin-top: 24px; }
+.tag {
+  display: inline-block; padding: 4px 12px; border-radius: 20px;
+  font-size: 0.85rem; font-weight: 600; margin: 4px;
+}
+.tag-blue   { background: #1565c0; color: #fff; }
+.tag-green  { background: #2e7d32; color: #fff; }
+.tag-orange { background: #e65100; color: #fff; }
+.tag-purple { background: #6a1b9a; color: #fff; }
+.tag-teal   { background: #00695c; color: #fff; }
+.grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 32px; width: 100%; max-width: 1000px; margin-top: 16px; }
+.grid3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 24px; width: 100%; max-width: 1000px; margin-top: 16px; }
+.card {
+  background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1);
+  border-radius: 12px; padding: 20px 24px;
+}
+.card h3 { color: #4fc3f7; margin-bottom: 8px; font-size: 1.1rem; }
+.card p  { font-size: 0.95rem; text-align: left; color: #bbb; }
+.card ul li { font-size: 0.9rem; }
+.pipeline {
+  display: flex; align-items: center; flex-wrap: wrap;
+  gap: 0; margin: 24px 0; justify-content: center;
+}
+.pipe-node {
+  background: rgba(79,195,247,0.15); border: 1px solid #4fc3f7;
+  border-radius: 8px; padding: 10px 16px;
+  font-size: 0.85rem; font-weight: 600; color: #e3f2fd;
+  text-align: center; white-space: nowrap;
+}
+.pipe-node.parallel {
+  background: rgba(129,212,250,0.2); border-color: #81d4fa;
+  padding: 6px 12px;
+}
+.pipe-arrow { color: #4fc3f7; font-size: 1.2rem; padding: 0 4px; }
+.pipe-bracket { color: #81d4fa; font-size: 1.4rem; padding: 0 2px; font-weight: 300; }
+.badge {
+  display: inline-block; font-size: 0.75rem; padding: 2px 8px;
+  border-radius: 4px; font-weight: 600; margin-left: 6px;
+}
+.badge-rule  { background: #1b5e20; color: #a5d6a7; }
+.badge-llm   { background: #1a237e; color: #90caf9; }
+.badge-mcp   { background: #4a148c; color: #ce93d8; }
+
+/* Extra helpers */
+.slide-num-fixed {
+  position: fixed; bottom: 16px; right: 24px;
+  font-size: 0.8rem; color: #546e7a;
+  background: rgba(0,0,0,0.5); padding: 4px 10px; border-radius: 20px;
+  z-index: 9999;
+}
+
+.parallel-group {
+  display: flex; flex-direction: column; gap: 8px;
+  border: 2px dashed #4fc3f7; border-radius: 10px; padding: 12px 16px;
+  background: rgba(79,195,247,0.05);
+}
+.parallel-label {
+  font-size: 0.7rem; color: #4fc3f7; text-align: center; margin-bottom: 4px;
+  letter-spacing: 0.05em; text-transform: uppercase;
+}
+
+.fraud-conditional {
+  display: flex; flex-direction: column; gap: 8px;
+  border: 2px dashed #ffb74d; border-radius: 10px; padding: 12px 16px;
+  background: rgba(255,183,77,0.05);
+}
+.fraud-label {
+  font-size: 0.7rem; color: #ffb74d; text-align: center; margin-bottom: 4px;
+  letter-spacing: 0.05em; text-transform: uppercase;
+}
+.pipe-node.fraud {
+  background: rgba(255,183,77,0.15); border-color: #ffb74d; color: #ffe082;
+}
+
+table { border-collapse: collapse; width: 100%; max-width: 940px; font-size: 0.9rem; }
+th { background: rgba(79,195,247,0.2); color: #4fc3f7; padding: 10px 14px; text-align: left; }
+td { padding: 8px 14px; border-bottom: 1px solid rgba(255,255,255,0.08); color: #ccc; }
+tr:hover td { background: rgba(255,255,255,0.03); }
+
+.insight-box {
+  background: rgba(79,195,247,0.1); border: 1px solid #4fc3f7;
+  border-radius: 10px; padding: 18px 28px; margin-top: 20px;
+  max-width: 820px; text-align: center;
+}
+.insight-box p { color: #e3f2fd; font-style: italic; font-size: 1rem; }
+
+.warning-box {
+  background: rgba(255,183,77,0.1); border: 1px solid #ffb74d;
+  border-radius: 10px; padding: 16px 28px; margin-top: 16px;
+  max-width: 820px; text-align: center;
+}
+.warning-box p { color: #ffe082; font-size: 0.95rem; }
+
+.state-table { width: 100%; max-width: 900px; margin-top: 12px; }
+.state-table th { background: rgba(106,27,154,0.3); color: #ce93d8; }
+.state-table td { font-size: 0.88rem; }
+.state-table td code { background: rgba(255,255,255,0.08); padding: 1px 5px; border-radius: 3px; font-family: 'Courier New', monospace; font-size: 0.85rem; color: #a5d6a7; }
+
+.code {
+  background: rgba(0,0,0,0.4); border: 1px solid #333;
+  border-radius: 8px; padding: 16px 20px;
+  font-family: 'Courier New', monospace; font-size: 0.88rem;
+  color: #a5d6a7; text-align: left; width: 100%; max-width: 900px;
+  white-space: pre; overflow-x: auto;
+  margin-top: 12px;
+}
+
+.stat-row { display: flex; gap: 40px; margin-top: 16px; justify-content: center; }
+.stat { text-align: center; }
+.stat .num { font-size: 2.8rem; font-weight: 800; color: #4fc3f7; }
+.stat .label { font-size: 0.9rem; color: #90a4ae; }
+
+.flow-row {
+  display: flex; align-items: center; gap: 12px;
+  margin: 6px 0; flex-wrap: wrap; justify-content: center;
+}
+
+.dim-card {
+  background: rgba(255,255,255,0.04); border: 1px solid rgba(79,195,247,0.3);
+  border-radius: 10px; padding: 16px 20px; text-align: center;
+}
+.dim-card .dim-label { font-size: 0.8rem; color: #90caf9; text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 6px; }
+.dim-card .dim-value { font-size: 1.05rem; font-weight: 600; color: #e3f2fd; }
+.dim-card .dim-desc  { font-size: 0.82rem; color: #90a4ae; margin-top: 4px; }
+
+.highlight-num { color: #4fc3f7; font-weight: 700; }
+
+@media print {
+  .slide { page-break-after: always; min-height: 100vh; }
+  .slide-num-fixed { display: none; }
+}
+</style>
+</head>
+<body>
+
+<!-- ========================================================= SLIDE COUNTER -->
+<div class="slide-num-fixed" id="slideCounter">1 / 15</div>
+
+<div class="deck">
+
+<!-- ================================================== SLIDE 1: TITLE -->
+<div class="slide slide-title" id="slide-1">
+  <h1>LoanFlow AI</h1>
+  <p class="subtitle">Multi-Agent Loan Review System</p>
+  <div style="margin: 24px 0;">
+    <span class="tag tag-orange">LangGraph</span>
+    <span class="tag tag-green">OpenAI GPT-4o</span>
+    <span class="tag tag-purple">Pinecone</span>
+    <span class="tag tag-blue">FastMCP</span>
+    <span class="tag tag-teal">SQLite</span>
+  </div>
+  <p class="byline">IK Capstone Project — Week 1</p>
+</div>
+
+<!-- ================================================== SLIDE 2: THE PROBLEM -->
+<div class="slide slide-problem" id="slide-2">
+  <h2>The Problem</h2>
+  <p style="margin-bottom: 28px;">Human loan reviewers face compounding challenges at scale.</p>
+  <div style="width:100%; max-width:860px;">
+    <div class="card" style="margin-bottom:16px;">
+      <h3>1 — Policy Volume Overload</h3>
+      <p>Reviewing hundreds of applications against complex, frequently-updated policy documents.
+         Manual cross-referencing is slow, error-prone, and inconsistent across reviewers.</p>
+    </div>
+    <div class="card" style="margin-bottom:16px;">
+      <h3>2 — Missing Documents Waste Review Cycles</h3>
+      <p>Applications move through the queue before anyone checks completeness.
+         Reviewers spend time on files that will be sent back anyway.</p>
+    </div>
+    <div class="card" style="margin-bottom:16px;">
+      <h3>3 — Risk Signals Buried in Raw Data</h3>
+      <p>High-risk patterns — extreme debt-to-income ratios, inconsistent income evidence, fraud signals —
+         require synthesis across multiple data points. Reviewers need conclusions, not spreadsheets.</p>
+    </div>
+  </div>
+  <div class="insight-box">
+    <p>"The system never approves or rejects — it provides grounded guidance so humans can decide with confidence."</p>
+  </div>
+</div>
+
+<!-- ================================================== SLIDE 3: ARCHITECTURE -->
+<div class="slide slide-arch" id="slide-3">
+  <h2>System Architecture</h2>
+  <p style="margin-bottom:8px;">Full agent pipeline — two process model, one request flow.</p>
+
+  <!-- Main pipeline row -->
+  <div class="pipeline">
+    <div class="pipe-node">InputGuardrail</div>
+    <span class="pipe-arrow">→</span>
+    <div class="pipe-node">PlannerAgent</div>
+    <span class="pipe-arrow">→</span>
+
+    <!-- Parallel group -->
+    <div class="parallel-group">
+      <div class="parallel-label">Parallel Specialists</div>
+      <div class="pipe-node parallel">RetrievalAgent</div>
+      <div class="pipe-node parallel">DocCheckAgent</div>
+      <div class="pipe-node parallel">RiskReviewAgent</div>
+    </div>
+
+    <span class="pipe-arrow">→</span>
+
+    <!-- Conditional fraud -->
+    <div class="fraud-conditional">
+      <div class="fraud-label">Conditional</div>
+      <div class="pipe-node fraud">FraudDetection</div>
+    </div>
+
+    <span class="pipe-arrow">→</span>
+    <div class="pipe-node">ReviewerAgent</div>
+    <span class="pipe-arrow">→</span>
+    <div class="pipe-node">OutputGuardrail</div>
+    <span class="pipe-arrow">→</span>
+    <div class="pipe-node">EvaluationAgent</div>
+  </div>
+
+  <div class="grid2" style="max-width:860px; margin-top:8px;">
+    <div class="card">
+      <h3>Two Routing Paths</h3>
+      <ul>
+        <li><strong>Low risk:</strong> FraudDetection is skipped entirely</li>
+        <li><strong>High risk:</strong> All specialists fire including FraudDetection</li>
+        <li>Routing decided by rule-based <code style="color:#a5d6a7;">should_run_fraud()</code> after parallel specialists complete</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h3>Two-Process Model</h3>
+      <ul>
+        <li>FastAPI backend — port <strong>8000</strong></li>
+        <li>MCP Server (FastMCP over HTTP SSE) — port <strong>8001</strong></li>
+        <li>Single SSE session opened at startup, reused across all requests</li>
+        <li>Agents call tools via MCP — zero direct DB imports</li>
+      </ul>
+    </div>
+  </div>
+</div>
+
+<!-- ================================================== SLIDE 4: LANGGRAPH STATE -->
+<div class="slide slide-design" id="slide-4">
+  <h2>LangGraph State — How Agents Share Memory</h2>
+  <p style="margin-bottom:18px;">
+    <code style="color:#a5d6a7; font-family:'Courier New',monospace;">LoanReviewState</code> is a <strong>TypedDict</strong> that flows through all 9 nodes.
+    Each node receives the <em>full</em> state, returns a <em>partial</em> dict, and LangGraph merges it automatically.
+  </p>
+
+  <div class="code">class LoanReviewState(TypedDict):
+    # Input
+    application_id: str
+    loan_application: LoanApplication
+
+    # Per-agent outputs (each agent writes its own slice)
+    sanitized_input:   SanitizedInput      # InputGuardrail
+    plan:              Plan                # PlannerAgent
+    retrieved_context: RetrievedContext    # RetrievalAgent
+    doc_check_result:  DocCheckResult      # DocCheckAgent
+    risk_assessment:   RiskAssessment      # RiskReviewAgent
+    fraud_signals:     FraudSignals | None # FraudDetectionAgent
+    reviewer_guidance: ReviewerGuidance    # ReviewerAgent
+    guardrail_result:  GuardrailResult     # OutputGuardrail
+    evaluation:        Evaluation          # EvaluationAgent
+
+    # Append-only lists (Annotated merge)
+    agent_trace:        Annotated[list[TraceEntry], operator.add]
+    guardrails_applied: Annotated[list[str],        operator.add]</div>
+
+  <div class="grid2" style="max-width:900px; margin-top:16px;">
+    <div class="card">
+      <h3>Append-Only Lists</h3>
+      <ul>
+        <li><code style="color:#a5d6a7;">agent_trace</code> — accumulates <code style="color:#a5d6a7;">TraceEntry</code> from every node (agent, started_at, finished_at, summaries)</li>
+        <li><code style="color:#a5d6a7;">guardrails_applied</code> — accumulates guardrail tags without any node overwriting another's record</li>
+        <li><code style="color:#a5d6a7;">Annotated[list, operator.add]</code> tells LangGraph to concatenate, not replace</li>
+      </ul>
+    </div>
+    <div class="insight-box" style="margin-top:0; text-align:left;">
+      <p style="text-align:left; font-size:1rem; color:#e3f2fd;">
+        "No shared variables, no pub/sub, no message queues — just a dict that grows."
+      </p>
+      <ul style="margin-top:10px;">
+        <li>Merge pattern is deterministic and testable</li>
+        <li>Any node can read any prior agent's output</li>
+        <li>Full audit trail is in the state — no external log needed</li>
+      </ul>
+    </div>
+  </div>
+</div>
+
+<!-- ================================================== SLIDE 5: GUARDRAILS -->
+<div class="slide slide-guard" id="slide-5">
+  <h2>Defense in Depth: Input &amp; Output Guardrails</h2>
+  <p style="margin-bottom:20px;">Two independent guardrail layers — neither alone is sufficient.</p>
+
+  <div class="grid2">
+    <div class="card">
+      <h3>InputGuardrail</h3>
+      <ul>
+        <li><strong>Length cap</strong> — 2 000 chars max; excess is truncated before any LLM sees it</li>
+        <li><strong>Financial PII regex</strong> — SSN, bank account, credit card → <code style="color:#ffb74d;">[REDACTED:TYPE]</code></li>
+        <li><strong>Presidio NLP</strong> — PERSON, EMAIL, PHONE detected and redacted</li>
+        <li><strong>Injection denylist</strong> — 30 phrases across 5 categories (prompt override, jailbreak, system manipulation, role-play, data exfiltration)</li>
+        <li><strong>Delimiter discipline</strong> — user content wrapped in <code style="color:#a5d6a7;">&lt;&lt;&lt;USER_QUESTION&gt;&gt;&gt;</code> markers before LLM calls</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h3>OutputGuardrail</h3>
+      <ul>
+        <li><strong>Forbidden phrases</strong> — word-boundary regex for "approved", "denied", "rejected" (skips "not approved" — context-aware)</li>
+        <li><strong>Citation honesty</strong> — every <code style="color:#a5d6a7;">[Source: X, chunk N]</code> must be traceable to <code style="color:#a5d6a7;">retrieved_context</code>; hallucinated citations are caught</li>
+        <li><strong>PII scrub</strong> — same financial regex pass on LLM output before it leaves the system</li>
+        <li><strong>On violation</strong> — safe fallback response, sets <code style="color:#ffb74d;">requires_human_review=True</code>, no silent retry</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="warning-box">
+    <p>Guardrail violations surface in <code style="color:#ffe082;">guardrails_applied</code> (append-only) and in the final <code style="color:#ffe082;">LoanReviewResponse</code> — never silently swallowed.</p>
+  </div>
+</div>
+
+<!-- ================================================== SLIDE 6: SPECIALIST AGENTS -->
+<div class="slide slide-agents" id="slide-6">
+  <h2>Agents Deep Dive — Specialist Agents</h2>
+  <div class="grid3">
+    <div class="card">
+      <h3>RetrievalAgent <span class="badge badge-mcp">MCP</span> <span class="badge badge-llm">LLM</span></h3>
+      <ul>
+        <li>LLM generates semantic query from loan context</li>
+        <li>Calls <code style="color:#a5d6a7;">search_policy_tool</code> via MCP → Pinecone top-K chunks</li>
+        <li>Returns <code style="color:#a5d6a7;">Citation</code> objects: chunk text + source + score</li>
+        <li>All downstream agents can cite these chunks</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h3>DocCheckAgent <span class="badge badge-mcp">MCP</span> <span class="badge badge-llm">LLM</span></h3>
+      <ul>
+        <li>Calls <code style="color:#a5d6a7;">get_submitted_documents_tool</code> — what was actually uploaded</li>
+        <li>Calls <code style="color:#a5d6a7;">extract_requirements_tool</code> (LLM) — what policy requires for this loan type</li>
+        <li>Compares submitted vs. required</li>
+        <li>Returns missing / present lists + completeness flag</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h3>RiskReviewAgent <span class="badge badge-rule">Rule</span></h3>
+      <ul>
+        <li>Pure rule-based — no LLM, fully deterministic</li>
+        <li>5 risk flags: <code style="color:#a5d6a7;">income_ratio</code>, <code style="color:#a5d6a7;">low_credit</code>, <code style="color:#a5d6a7;">missing_income_evidence</code>, <code style="color:#a5d6a7;">zero_income</code>, <code style="color:#a5d6a7;">no_docs</code></li>
+        <li>Outputs severity level: LOW / MEDIUM / HIGH</li>
+        <li>Feeds the conditional routing decision</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="card" style="max-width:940px; margin-top:20px;">
+    <h3>FraudDetectionAgent <span class="badge badge-mcp">MCP</span> <span class="badge badge-rule">Rule</span></h3>
+    <div style="display:flex; gap:40px; margin-top:6px; flex-wrap:wrap;">
+      <ul style="max-width:420px;">
+        <li>Calls <code style="color:#a5d6a7;">check_fraud_signals_tool</code> via MCP — deterministic threshold math, no LLM</li>
+        <li>Signals: income_mismatch_ratio, loan_to_income_extreme, employment_income_conflict, suspicious_round_numbers</li>
+      </ul>
+      <ul style="max-width:420px;">
+        <li>Only fires when routed by <code style="color:#a5d6a7;">should_run_fraud()</code> conditional edge</li>
+        <li>Returns <code style="color:#a5d6a7;">FraudSignals</code> with flag list + severity — <code style="color:#a5d6a7;">None</code> if skipped</li>
+      </ul>
+    </div>
+  </div>
+</div>
+
+<!-- ================================================== SLIDE 7: PLANNER & ROUTING -->
+<div class="slide slide-design" id="slide-7">
+  <h2>Smart Routing — Run Only What's Needed</h2>
+  <p style="margin-bottom:20px;">PlannerAgent sets intent; LangGraph conditional edges enforce it.</p>
+
+  <div class="grid2">
+    <div class="card">
+      <h3>Always Runs (Every Request)</h3>
+      <ul>
+        <li>InputGuardrail</li>
+        <li>PlannerAgent</li>
+        <li>Parallel Specialists (Retrieval, DocCheck, RiskReview)</li>
+        <li>ReviewerAgent</li>
+        <li>OutputGuardrail</li>
+        <li>EvaluationAgent</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h3>Conditionally Runs: FraudDetection</h3>
+      <p style="text-align:left; margin-bottom:10px;">Triggers when <strong>any</strong> of:</p>
+      <ul>
+        <li>Loan amount &gt; threshold (high loan)</li>
+        <li>High income ratio flag from RiskReviewAgent</li>
+        <li>Zero income detected</li>
+        <li>Employment type = <code style="color:#a5d6a7;">self_employed</code></li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="insight-box" style="margin-top:20px;">
+    <p>"Rule-based routing is cheaper, faster, and testable compared to LLM-based routing."</p>
+  </div>
+
+  <div class="card" style="max-width:900px; margin-top:16px;">
+    <h3>How the Conditional Edge Works</h3>
+    <p style="text-align:left; color:#bbb; font-size:0.95rem;">
+      After the parallel specialists node completes, <code style="color:#a5d6a7;">should_run_fraud(state)</code> inspects
+      <code style="color:#a5d6a7;">risk_assessment.flags</code> alongside the raw loan fields.
+      LangGraph routes to <code style="color:#a5d6a7;">fraud_detection_node</code> or skips directly to
+      <code style="color:#a5d6a7;">reviewer_node</code> — no if/else inside any agent.
+    </p>
+  </div>
+</div>
+
+<!-- ================================================== SLIDE 8: PARALLEL EXECUTION -->
+<div class="slide slide-perf" id="slide-8">
+  <h2>Parallel Execution — Cutting Latency by ~60%</h2>
+  <p style="margin-bottom:20px;">Three fully independent specialists run concurrently with <code style="color:#a5d6a7;">asyncio.gather()</code>.</p>
+
+  <div class="grid2">
+    <div class="card">
+      <h3>Sequential (Before)</h3>
+      <div class="pipeline" style="flex-direction:column; align-items:flex-start; gap:6px; margin:8px 0;">
+        <div class="pipe-node" style="width:220px; text-align:center;">RetrievalAgent ~8s</div>
+        <span style="color:#4fc3f7; padding-left:90px;">↓</span>
+        <div class="pipe-node" style="width:220px; text-align:center;">DocCheckAgent ~7s</div>
+        <span style="color:#4fc3f7; padding-left:90px;">↓</span>
+        <div class="pipe-node" style="width:220px; text-align:center;">RiskReviewAgent ~1s</div>
+      </div>
+      <p style="text-align:left; margin-top:8px; font-size:0.95rem;">Total: <span style="color:#ffb74d; font-weight:700;">~25 seconds</span></p>
+    </div>
+    <div class="card">
+      <h3>Parallel (After)</h3>
+      <div style="border: 2px dashed #4fc3f7; border-radius:10px; padding:14px; background:rgba(79,195,247,0.05); margin:8px 0;">
+        <div class="parallel-label">asyncio.gather()</div>
+        <div style="display:flex; gap:10px; flex-wrap:wrap; justify-content:center;">
+          <div class="pipe-node parallel">Retrieval ~8s</div>
+          <div class="pipe-node parallel">DocCheck ~7s</div>
+          <div class="pipe-node parallel">Risk ~1s</div>
+        </div>
+      </div>
+      <p style="text-align:left; margin-top:8px; font-size:0.95rem;">Total: <span style="color:#4fc3f7; font-weight:700;">~10 seconds</span> (bounded by slowest)</p>
+    </div>
+  </div>
+
+  <div class="grid3" style="margin-top:20px;">
+    <div class="card" style="text-align:center;">
+      <div style="font-size:2.4rem; font-weight:800; color:#4fc3f7;">~60%</div>
+      <div style="font-size:0.9rem; color:#90a4ae; margin-top:4px;">Latency reduction</div>
+    </div>
+    <div class="card" style="text-align:center;">
+      <div style="font-size:2.4rem; font-weight:800; color:#4fc3f7;">&lt;20s</div>
+      <div style="font-size:0.9rem; color:#90a4ae; margin-top:4px;">p95 target</div>
+    </div>
+    <div class="card">
+      <h3>Why it works</h3>
+      <p style="font-size:0.88rem;">The three specialists are fully independent — none reads another's output. <code style="color:#a5d6a7;">parallel_specialists_node</code> merges all three partial dicts into state after gather() resolves.</p>
+    </div>
+  </div>
+</div>
+
+<!-- ================================================== SLIDE 9: MCP TOOL LAYER -->
+<div class="slide slide-agents" id="slide-9">
+  <h2>MCP: Decoupled Tool Architecture</h2>
+  <p style="margin-bottom:16px;">Agents call tools by name — zero coupling to implementation details.</p>
+
+  <!-- Pipeline showing two processes -->
+  <div class="pipeline" style="margin-bottom:20px;">
+    <div class="pipe-node">FastAPI :8000<br><small style="font-weight:400; color:#90caf9;">Agent orchestration</small></div>
+    <span class="pipe-arrow">→ SSE →</span>
+    <div class="pipe-node" style="background:rgba(106,27,154,0.2); border-color:#ce93d8; color:#ce93d8;">FastMCP :8001<br><small style="font-weight:400;">Tool implementations</small></div>
+    <span class="pipe-arrow">→</span>
+    <div style="display:flex; flex-direction:column; gap:6px;">
+      <div class="pipe-node parallel" style="font-size:0.78rem;">Pinecone</div>
+      <div class="pipe-node parallel" style="font-size:0.78rem;">SQLite</div>
+      <div class="pipe-node parallel" style="font-size:0.78rem;">Rule Math</div>
+    </div>
+  </div>
+
+  <table>
+    <thead>
+      <tr>
+        <th>Tool Name</th>
+        <th>Backend</th>
+        <th>Uses AI?</th>
+        <th>Called By</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr><td><code style="color:#a5d6a7;">search_policy_tool</code></td><td>Pinecone vector search</td><td>No</td><td>RetrievalAgent</td></tr>
+      <tr><td><code style="color:#a5d6a7;">extract_requirements_tool</code></td><td>LLM (gpt-4o-mini)</td><td>Yes</td><td>DocCheckAgent</td></tr>
+      <tr><td><code style="color:#a5d6a7;">check_fraud_signals_tool</code></td><td>Rule-based math</td><td>No</td><td>FraudDetectionAgent</td></tr>
+      <tr><td><code style="color:#a5d6a7;">get_loan_application_tool</code></td><td>SQLite</td><td>No</td><td>PlannerAgent</td></tr>
+      <tr><td><code style="color:#a5d6a7;">get_submitted_documents_tool</code></td><td>SQLite</td><td>No</td><td>DocCheckAgent</td></tr>
+    </tbody>
+  </table>
+
+  <div class="insight-box" style="margin-top:16px;">
+    <p>Agents call <code style="color:#a5d6a7; font-size:1rem;">call_tool("name", args)</code> — the SSE session is opened once at FastAPI startup and reused across all requests. Swapping Pinecone for another store requires zero agent code changes.</p>
+  </div>
+</div>
+
+<!-- ================================================== SLIDE 10: DATA CONTRACTS -->
+<div class="slide slide-design" id="slide-10">
+  <h2>Type-Safe Data Contracts</h2>
+  <p style="margin-bottom:16px;">Pydantic models define the interface before agents are written. Contracts first.</p>
+
+  <div class="grid2" style="max-width:1000px;">
+    <div>
+      <div class="card" style="margin-bottom:14px;">
+        <h3>Input Flow</h3>
+        <div class="flow-row">
+          <div class="pipe-node" style="font-size:0.8rem;">LoanApplication</div>
+          <span class="pipe-arrow">→</span>
+          <div class="pipe-node" style="font-size:0.8rem;">LoanReviewRequest</div>
+        </div>
+      </div>
+      <div class="card" style="margin-bottom:14px;">
+        <h3>Per-Agent Output Types</h3>
+        <ul style="column-count:2; column-gap:16px;">
+          <li><code style="color:#a5d6a7; font-size:0.82rem;">SanitizedInput</code></li>
+          <li><code style="color:#a5d6a7; font-size:0.82rem;">Plan</code></li>
+          <li><code style="color:#a5d6a7; font-size:0.82rem;">RetrievedContext</code></li>
+          <li><code style="color:#a5d6a7; font-size:0.82rem;">DocCheckResult</code></li>
+          <li><code style="color:#a5d6a7; font-size:0.82rem;">RiskAssessment</code></li>
+          <li><code style="color:#a5d6a7; font-size:0.82rem;">ReviewerGuidance</code></li>
+          <li><code style="color:#a5d6a7; font-size:0.82rem;">GuardrailResult</code></li>
+          <li><code style="color:#a5d6a7; font-size:0.82rem;">Evaluation</code></li>
+          <li><code style="color:#a5d6a7; font-size:0.82rem;">FraudSignals</code></li>
+        </ul>
+      </div>
+      <div class="card">
+        <h3>Final Output</h3>
+        <div class="flow-row">
+          <div class="pipe-node" style="font-size:0.8rem;">ReviewerGuidance</div>
+          <span class="pipe-arrow">→</span>
+          <div class="pipe-node" style="font-size:0.8rem;">LoanReviewResponse</div>
+        </div>
+      </div>
+    </div>
+    <div>
+      <div class="card" style="margin-bottom:14px;">
+        <h3>TraceEntry — Full Audit Trail</h3>
+        <ul>
+          <li><code style="color:#a5d6a7;">agent</code> — which node ran</li>
+          <li><code style="color:#a5d6a7;">started_at / finished_at</code> — wall-clock timestamps</li>
+          <li><code style="color:#a5d6a7;">input_summary</code> — what the node received</li>
+          <li><code style="color:#a5d6a7;">output_summary</code> — what the node returned</li>
+          <li>Appended to <code style="color:#a5d6a7;">agent_trace</code> list in state</li>
+        </ul>
+      </div>
+      <div class="insight-box" style="margin-top:0;">
+        <p style="font-size:0.95rem;">"Decide your contracts before writing agents — the type system catches integration bugs before runtime."</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ================================================== SLIDE 11: DATABASE -->
+<div class="slide slide-eval" id="slide-11">
+  <h2>Persistence Layer — SQLite + SQLModel</h2>
+  <p style="margin-bottom:18px;">Three tables. Two access paths. Agents never import db/ directly.</p>
+
+  <div class="grid3" style="margin-bottom:20px;">
+    <div class="card" style="text-align:center;">
+      <h3>loan_applications</h3>
+      <p style="text-align:center; font-size:0.9rem;">Core loan data: applicant info, loan amount, type, income, employment, credit score, debt</p>
+    </div>
+    <div class="card" style="text-align:center;">
+      <h3>submitted_documents</h3>
+      <p style="text-align:center; font-size:0.9rem;">Document records linked to application_id: doc type, filename, upload timestamp</p>
+    </div>
+    <div class="card" style="text-align:center;">
+      <h3>review_records</h3>
+      <p style="text-align:center; font-size:0.9rem;">Persisted LoanReviewResponse + full agent_trace JSON — every review is auditable</p>
+    </div>
+  </div>
+
+  <div class="grid2" style="max-width:900px;">
+    <div class="card">
+      <h3>Access Path 1 — FastAPI Routes</h3>
+      <ul>
+        <li>FastAPI route handlers use <code style="color:#a5d6a7;">get_session</code> dependency injection</li>
+        <li>SQLModel ORM — type-safe queries</li>
+        <li>Used for CRUD endpoints: seed data, fetch applications, store reviews</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h3>Access Path 2 — Agents via MCP</h3>
+      <ul>
+        <li>Agents call <code style="color:#a5d6a7;">get_loan_application_tool</code> and <code style="color:#a5d6a7;">get_submitted_documents_tool</code></li>
+        <li>MCP server owns the DB connection — agents are stateless</li>
+        <li>Enforces separation: agent logic ≠ data access logic</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="insight-box" style="margin-top:16px;">
+    <p>6 seed scenarios exercise every routing path — from clean low-risk to injection attacks.</p>
+  </div>
+</div>
+
+<!-- ================================================== SLIDE 12: SEED SCENARIOS -->
+<div class="slide slide-demo" id="slide-12">
+  <h2>6 Test Scenarios — Demo Ready</h2>
+  <p style="margin-bottom:18px;">Each scenario exercises a distinct subset of the pipeline.</p>
+
+  <table>
+    <thead>
+      <tr>
+        <th>ID</th>
+        <th>Scenario</th>
+        <th>Key Path</th>
+        <th>What Fires</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><strong>LN-001</strong></td>
+        <td>Small personal loan, full docs</td>
+        <td>Low risk</td>
+        <td>All specialists, <span style="color:#4fc3f7;">no Fraud</span></td>
+      </tr>
+      <tr>
+        <td><strong>LN-002</strong></td>
+        <td>Large mortgage, missing income docs</td>
+        <td>DocCheck + Risk flags</td>
+        <td>DocCheck missing list, RiskReview flags</td>
+      </tr>
+      <tr>
+        <td><strong>LN-003</strong></td>
+        <td>Self-employed, $300K loan on $40K income</td>
+        <td>Fraud triggered</td>
+        <td>Fraud signals: income_mismatch + self_employed</td>
+      </tr>
+      <tr>
+        <td><strong>LN-004</strong></td>
+        <td>Huge loan + low credit + missing IDs</td>
+        <td><strong style="color:#ffb74d;">ALL specialists</strong></td>
+        <td>DocCheck + RiskReview HIGH + FraudDetection</td>
+      </tr>
+      <tr>
+        <td><strong>LN-005</strong></td>
+        <td>Unemployed applicant, zero income</td>
+        <td>Edge case</td>
+        <td>zero_income flag, conditional Fraud routing</td>
+      </tr>
+      <tr>
+        <td><strong>LN-006</strong></td>
+        <td>Injection phrase in borrower_name field</td>
+        <td>InputGuardrail</td>
+        <td>Guardrail catches, pipeline short-circuits</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <div class="insight-box" style="margin-top:20px;">
+    <p>"Pick <strong>LN-004</strong> for the demo — every agent fires, showing the full pipeline in action."</p>
+  </div>
+</div>
+
+<!-- ================================================== SLIDE 13: EVALUATION -->
+<div class="slide slide-eval" id="slide-13">
+  <h2>LLM-as-Judge: Built-in Quality Scoring</h2>
+  <p style="margin-bottom:18px;">EvaluationAgent scores every review before the response leaves the system.</p>
+
+  <div class="grid2">
+    <div>
+      <div class="grid2" style="max-width:500px; margin-top:0;">
+        <div class="dim-card">
+          <div class="dim-label">decision_quality</div>
+          <div class="dim-value">pass / fail / partial</div>
+          <div class="dim-desc">Is the guidance actionable and useful for the human reviewer?</div>
+        </div>
+        <div class="dim-card">
+          <div class="dim-label">grounding_score</div>
+          <div class="dim-value">0.0 → 1.0</div>
+          <div class="dim-desc">Fraction of claims backed by retrieved policy chunks</div>
+        </div>
+        <div class="dim-card">
+          <div class="dim-label">hallucination_risk</div>
+          <div class="dim-value">low / medium / high</div>
+          <div class="dim-desc">Unsubstantiated assertions in the output</div>
+        </div>
+        <div class="dim-card">
+          <div class="dim-label">policy_compliance</div>
+          <div class="dim-value">pass / fail / partial</div>
+          <div class="dim-desc">Does guidance align with retrieved policy requirements?</div>
+        </div>
+      </div>
+    </div>
+    <div class="card">
+      <h3>Design Decisions</h3>
+      <ul>
+        <li>Uses <code style="color:#a5d6a7;">gpt-4o</code> with <code style="color:#a5d6a7;">temperature=0</code> for reproducible scoring</li>
+        <li>Scores <strong>both</strong> the real answer and the safe fallback — the fallback also needs to be evaluated</li>
+        <li>Rule-engine outputs (risk flags, fraud signals) are counted as grounded — they are not hallucinations, they are deterministic computations</li>
+        <li>Evaluation results persisted in <code style="color:#a5d6a7;">review_records</code> for longitudinal quality tracking</li>
+        <li>Minimum eval suite: 5 cases including at least 1 injection attempt</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="insight-box" style="margin-top:16px;">
+    <p>Evaluation runs inside the graph — not as an offline batch job — so every production response is scored.</p>
+  </div>
+</div>
+
+<!-- ================================================== SLIDE 14: STACK & NFRS -->
+<div class="slide slide-stack" id="slide-14">
+  <h2>Tech Stack &amp; Non-Functional Requirements</h2>
+
+  <div class="grid2">
+    <div class="card">
+      <h3>Technology Stack</h3>
+      <ul>
+        <li><span class="tag tag-blue" style="font-size:0.75rem;">Runtime</span> Python 3.11, FastAPI, asyncio</li>
+        <li><span class="tag tag-orange" style="font-size:0.75rem;">Orchestration</span> LangGraph (StateGraph)</li>
+        <li><span class="tag tag-green" style="font-size:0.75rem;">LLMs</span> OpenAI gpt-4o + gpt-4o-mini</li>
+        <li><span class="tag tag-purple" style="font-size:0.75rem;">Vector</span> Pinecone (policy document index)</li>
+        <li><span class="tag tag-teal" style="font-size:0.75rem;">Tools</span> FastMCP over HTTP SSE</li>
+        <li><span class="tag tag-orange" style="font-size:0.75rem;">PII</span> Microsoft Presidio NLP</li>
+        <li><span class="tag tag-blue" style="font-size:0.75rem;">DB</span> SQLite + SQLModel ORM</li>
+        <li><span class="tag tag-green" style="font-size:0.75rem;">Frontend</span> React + Vite</li>
+        <li><span class="tag tag-teal" style="font-size:0.75rem;">Deploy</span> Docker Compose</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h3>NFRs — Targets &amp; Status</h3>
+      <table style="margin-top:8px; font-size:0.88rem;">
+        <thead>
+          <tr><th>NFR</th><th>Target</th><th>Status</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>Latency p95</td><td>&lt;20 seconds</td><td style="color:#a5d6a7;">~10–15s (parallel)</td></tr>
+          <tr><td>Agent test coverage</td><td>≥80%</td><td style="color:#a5d6a7;">Guardrails + agents</td></tr>
+          <tr><td>Secrets in code</td><td>Zero</td><td style="color:#a5d6a7;">Env vars only</td></tr>
+          <tr><td>Eval suite size</td><td>≥5 cases</td><td style="color:#a5d6a7;">6 seed scenarios</td></tr>
+          <tr><td>Injection coverage</td><td>≥1 case</td><td style="color:#a5d6a7;">LN-006</td></tr>
+          <tr><td>Human override</td><td>Always possible</td><td style="color:#a5d6a7;">requires_human_review flag</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- ================================================== SLIDE 15: END / Q&A -->
+<div class="slide slide-end" id="slide-15">
+  <h1>LoanFlow AI</h1>
+  <p class="subtitle">Guidance-first. Policy-grounded. Auditable.</p>
+
+  <div style="margin: 36px 0 28px; width:100%; max-width:800px;">
+    <div class="card" style="margin-bottom:14px; border-color: rgba(79,195,247,0.4);">
+      <h3 style="font-size:1rem;">1 — LangGraph State = Shared Memory</h3>
+      <p style="text-align:left; font-size:0.95rem; color:#bbb;">No message bus, no shared variables. A TypedDict that grows — each node writes its slice, LangGraph merges deterministically.</p>
+    </div>
+    <div class="card" style="margin-bottom:14px; border-color: rgba(79,195,247,0.4);">
+      <h3 style="font-size:1rem;">2 — MCP Decouples Tool Logic from Agent Logic</h3>
+      <p style="text-align:left; font-size:0.95rem; color:#bbb;">Agents call tools by name via SSE. Pinecone, SQLite, or rule math can be swapped without touching agent code.</p>
+    </div>
+    <div class="card" style="border-color: rgba(79,195,247,0.4);">
+      <h3 style="font-size:1rem;">3 — Guardrails Are Defense in Depth</h3>
+      <p style="text-align:left; font-size:0.95rem; color:#bbb;">Input and output layers catch different threat classes. Neither alone is sufficient. Both log to immutable state.</p>
+    </div>
+  </div>
+
+  <h2 style="font-size:2.4rem; color:#4fc3f7; margin-top:8px;">Q &amp; A</h2>
+  <p class="byline" style="margin-top:12px;">IK Capstone Week 1 — 2026</p>
+</div>
+
+</div><!-- end .deck -->
+
+<script>
+(function () {
+  var counter = document.getElementById('slideCounter');
+  var slides = document.querySelectorAll('.slide');
+  var total = slides.length;
+
+  function getCurrentSlide() {
+    var scrollY = window.scrollY + window.innerHeight / 2;
+    var best = 0;
+    for (var i = 0; i < slides.length; i++) {
+      var rect = slides[i].getBoundingClientRect();
+      var top = rect.top + window.scrollY;
+      if (top <= scrollY) {
+        best = i;
+      }
+    }
+    return best + 1;
+  }
+
+  function update() {
+    counter.textContent = getCurrentSlide() + ' / ' + total;
+  }
+
+  window.addEventListener('scroll', update, { passive: true });
+  window.addEventListener('resize', update, { passive: true });
+  update();
+})();
+</script>
+</body>
+</html>
