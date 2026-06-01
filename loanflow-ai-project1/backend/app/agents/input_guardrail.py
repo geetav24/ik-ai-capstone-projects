@@ -127,13 +127,10 @@ async def input_guardrail_agent(state: LoanReviewState) -> dict:
         ).text
 
     # STEP 3 — Injection detection via denylist
-    # Scan both the question AND application string fields (borrower_name is a common target)
     injection_signals = []
-    app = state.get("application") or {}
-    app_fields_to_scan = " ".join(str(app.get(f, "")) for f in ("borrower_name", "loan_type", "employment_status"))
-    scan_text = (cleaned_question + " " + app_fields_to_scan).lower()
+    question_lower = cleaned_question.lower()
     for phrase in _INJECTION_DENYLIST:
-        if phrase in scan_text:
+        if phrase in question_lower:
             injection_signals.append(phrase)
 
     # STEP 4 — Wrap in delimiters so downstream LLMs treat content as data

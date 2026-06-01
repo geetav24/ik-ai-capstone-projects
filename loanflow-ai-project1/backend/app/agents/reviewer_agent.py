@@ -89,14 +89,12 @@ async def reviewer_agent(state: LoanReviewState) -> dict:
     answer = await ask_llm_quality(system_prompt, user_prompt)
     finished_at = datetime.utcnow()
 
-    # STEP 5 — Determine requires_human_review
-    injection_signals = state.get("injection_signals") or []
+    # STEP 5 — Determine requires_human_review per rules in the TODO
     severity_trigger = risk_severity in ("high", "critical")
     fraud_trigger = bool(fraud_signals)
     missing_docs_trigger = bool(missing_docs)
     no_policy_grounding = len(chunks) == 0
-    injection_trigger = bool(injection_signals)
-    requires_human_review = bool(severity_trigger or fraud_trigger or missing_docs_trigger or no_policy_grounding or injection_trigger)
+    requires_human_review = bool(severity_trigger or fraud_trigger or missing_docs_trigger or no_policy_grounding)
 
     reviewer_guidance = ReviewerGuidance(
         answer=answer,
@@ -108,7 +106,7 @@ async def reviewer_agent(state: LoanReviewState) -> dict:
         f"chunks={len(chunks)}; risk_severity={risk_severity}; "
         f"fraud_signals={len(fraud_signals)}; missing_docs={len(missing_docs)}"
     )
-    triggers = [t for t, v in [("severity", severity_trigger), ("fraud", fraud_trigger), ("missing_docs", missing_docs_trigger), ("no_policy_grounding", no_policy_grounding), ("injection", injection_trigger)] if v]
+    triggers = [t for t, v in [("severity", severity_trigger), ("fraud", fraud_trigger), ("missing_docs", missing_docs_trigger), ("no_policy_grounding", no_policy_grounding)] if v]
     output_summary = f"requires_human_review={requires_human_review}; triggers={triggers or ['none']}"
 
     trace_entry = TraceEntry(
